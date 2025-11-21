@@ -287,3 +287,9 @@ def send_error_alert(message: str) -> Optional[Dict[str, Any]]:
         return None
     text = f"🚨 ERROR ALERT:\n{message}"
     return send_text(me_id, text)
+
+
+# ============================================================
+# Legacy / test IDs (needed by tests.test_pro_features)
+# ============================================================
+
