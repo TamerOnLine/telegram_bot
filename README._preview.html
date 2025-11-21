@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>README.md</title>
+<style>
+    body {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 20px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.7;
+        font-size: 16px;
+        background: #fafafa;
+        color: #222;
+    }
+    h1, h2, h3, h4 {
+        margin-top: 1.4em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+    }
+    pre {
+        padding: 12px;
+        border-radius: 6px;
+        background: #111;
+        color: #f5f5f5;
+        overflow-x: auto;
+        font-size: 14px;
+    }
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    a {
+        text-decoration: none;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+    table {
+        border-collapse: collapse;
+        margin: 16px 0;
+        width: 100%;
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px 10px;
+        text-align: left;
+    }
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+    ul, ol {
+        padding-left: 24px;
+    }
+</style>
+</head>
+<body>
+<h1 id="telegram-multi-bot-framework-single-bot-example">Telegram Multi-Bot Framework (Single-Bot Example)</h1>
+
+<p>This project provides a clean, scalable framework for building multiple Telegram bots,<br />
+all sharing the same backend logic, same database, and same Streamlit control panel.</p>
+
+<p>This README describes the framework using <strong>one default bot only</strong> to keep things simple.<br />
+You can later duplicate this bot to create additional bots (e.g., <code>quran</code>, <code>gmail</code>, etc.).</p>
+
+<hr />
+
+<h2 id="features">🚀 Features</h2>
+
+<ul>
+<li>Unified backend for all bots  </li>
+<li>Shared SQLite database (<code>telegram_data.db</code>)  </li>
+<li>Automatic user/message logging based on <code>BOT_PROFILE</code>  </li>
+<li>Streamlit control panel displaying:
+<ul>
+<li>Bot status</li>
+<li>Send text/media</li>
+<li>Alerts</li>
+<li>Scheduled messages</li>
+<li><strong>Users who contacted the current bot only</strong></li>
+</ul></li>
+<li>Easy replication to create unlimited Telegram bots</li>
+</ul>
+
+<hr />
+
+<h2 id="project-structure-single-default-bot-example">📦 Project Structure (Single Default Bot Example)</h2>
+
+<pre><code>telegram/
+│
+├── src/
+│   ├── telegram/
+│   │   ├── bot.py
+│   │   ├── chat_bot.py
+│   │   ├── db.py
+│   │   ├── streamlit_panel.py
+│   │   ├── telegram_fetch.py
+│   │   ├── telegram_utils.py
+│   │   └── panel/
+│   │       ├── environment.py
+│   │       ├── chat_bot.py
+│   │       ├── scheduler.py
+│   │       ├── telegram_fetch.py
+│   │       ├── ui_layout.py
+│   │       └── ui/
+│   │           ├── layout.py
+│   │           ├── sidebar.py
+│   │           ├── tab_alert.py
+│   │           ├── tab_info.py
+│   │           ├── tab_media.py
+│   │           ├── tab_schedule.py
+│   │           ├── tab_text.py
+│   │           └── tab_users.py
+│   │
+│   └── bots/
+│       └── default_bot/
+│           └── app.py
+│
+├── apps/
+│   └── default_bot/
+│       ├── .env
+│       ├── bot.py
+│       └── streamlit_app.py
+│
+└── telegram_data.db
+</code></pre>
+
+<hr />
+
+<h2 id="environment-variables-env">⚙️ Environment Variables (<code>.env</code>)</h2>
+
+<p>Each bot folder under <code>apps/...</code> contains its own <code>.env</code>:</p>
+
+<pre><code>TELEGRAM_BOT_TOKEN=123456:ABCDEF...
+BOT_PROFILE=default_bot
+</code></pre>
+
+<hr />
+
+<h2 id="running-the-bot">▶️ Running the Bot</h2>
+
+<pre><code>python apps/default_bot/bot.py
+</code></pre>
+
+<hr />
+
+<h2 id="running-the-control-panel">🖥️ Running the Control Panel</h2>
+
+<pre><code>streamlit run apps/default_bot/streamlit_app.py
+</code></pre>
+
+<hr />
+
+<h2 id="adding-another-bot">📌 Adding Another Bot</h2>
+
+<p>Duplicate the folder:</p>
+
+<pre><code>apps/default_bot → apps/quran
+</code></pre>
+
+<p>Then update <code>.env</code>:</p>
+
+<pre><code>BOT_PROFILE=quran
+TELEGRAM_BOT_TOKEN=YOUR_NEW_TOKEN
+</code></pre>
+
+<hr />
+
+<h2 id="license">🏁 License</h2>
+
+<p>MIT License</p>
+
+</body>
+</html>
