@@ -5,7 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.121.3",
     "google-api-python-client>=2.187.0",
+    "google-auth>=2.41.1",
     "google-auth-httplib2>=0.2.1",
     "google-auth-oauthlib>=1.2.3",
     "markdown2>=2.5.4",
@@ -14,4 +16,5 @@ dependencies = [
     "python-telegram-bot>=22.5",
     "requests>=2.32.5",
     "streamlit>=1.51.0",
+    "uvicorn>=0.38.0",
 ]
