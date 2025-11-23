@@ -1,9 +1,10 @@
 [project]
-name = "telegram"
+name = "telegram-bot-suite"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-bot telegram system"
 readme = "README.md"
 requires-python = ">=3.12"
+
 dependencies = [
     "fastapi>=0.121.3",
     "google-api-python-client>=2.187.0",
@@ -18,3 +19,13 @@ dependencies = [
     "streamlit>=1.51.0",
     "uvicorn>=0.38.0",
 ]
+
+# ================================================================
+# FIX for: "Multiple top-level packages discovered in flat layout"
+# ================================================================
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "core*"]
