@@ -1,186 +1,142 @@
 from __future__ import annotations
 
-import os
+import sys
 from pathlib import Path
+from typing import Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
-
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 
-from src.telegram.user_store import init_db, save_gmail_credentials
-
-# =========================
-# General Settings
-# =========================
-
+# Project directory path
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Path to the Google OAuth credentials file (downloaded from Google Cloud Console)
-CREDENTIALS_FILE = BASE_DIR / "credentials.json"
+from src.telegram.user_store import init_db, save_gmail_credentials  # type: ignore
 
-# Required Gmail scopes
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+# Importing configuration and HTML content from the bot directory
+import gmail_oauth_config as cfg
+import gmail_oauth_html as html
 
-# Callback URL registered in Google Cloud
-REDIRECT_URI = os.getenv(
-    "GMAIL_OAUTH_REDIRECT_URI",
-    "http://localhost:8001/oauth/callback",
-)
-
-# Ensure the database is initialized
-init_db()
+# Mapping between OAuth state and Telegram ID
+STATE_TO_TELEGRAM: Dict[str, int] = {}
 
 app = FastAPI(title="Gmail OAuth Server")
 
-# =========================
-# Helpers
-# =========================
 
-def _build_flow() -> Flow:
+@app.on_event("startup")
+def on_startup() -> None:
     """
-    Build a Flow object from the credentials file with the specified scopes.
+    Initialize the database on server startup.
+    Ensures the token directory exists.
+    """
+    try:
+        init_db()
+    except TypeError:
+        # Adjust here if init_db requires parameters
+        pass
 
-    Returns:
-        Flow: Google OAuth2 Flow instance configured for Gmail access.
+    cfg.GOOGLE_TOKEN_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index() -> str:
     """
+    Basic check page.
+    """
+    return html.index_html()
+
+
+@app.get("/start")
+async def start_oauth(telegram_id: int) -> RedirectResponse:
+    """
+    Starts the OAuth process.
+    Triggered by the bot via a URL like:
+    {GMAIL_OAUTH_BASE_URL}/start?telegram_id=123456
+    """
+    if not cfg.GOOGLE_CLIENT_SECRET_PATH.exists():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Google OAuth credentials file not found: {cfg.GOOGLE_CLIENT_SECRET_PATH}",
+        )
+
+    redirect_uri = f"{cfg.GMAIL_OAUTH_BASE_URL}/callback"
+
     flow = Flow.from_client_secrets_file(
-        str(CREDENTIALS_FILE),
-        scopes=SCOPES,
-        redirect_uri=REDIRECT_URI,
+        str(cfg.GOOGLE_CLIENT_SECRET_PATH),
+        scopes=cfg.SCOPES,
+        redirect_uri=redirect_uri,
     )
-    return flow
 
-def _success_html() -> str:
-    """
-    HTML content displayed after successful Gmail account linking.
-
-    Returns:
-        str: HTML response content.
-    """
-    return """
-    <html dir=\"rtl\" lang=\"ar\">
-      <head>
-        <meta charset=\"utf-8\" />
-        <title>تم ربط Gmail بنجاح</title>
-        <style>
-          body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
-            background-color: #0f172a;
-            color: #e5e7eb;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-          }
-          .card {
-            background-color: #020617;
-            padding: 2rem 2.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.35);
-            text-align: center;
-            max-width: 480px;
-          }
-          h1 {
-            margin-top: 0;
-            margin-bottom: 0.75rem;
-            font-size: 1.5rem;
-          }
-          p {
-            margin: 0.5rem 0;
-            line-height: 1.6;
-          }
-          .emoji {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-          }
-        </style>
-      </head>
-      <body>
-        <div class=\"card\">
-          <div class=\"emoji\">✅</div>
-          <h1>Gmail account successfully linked</h1>
-          <p>You can now return to Telegram and use the <code>/gmail</code> command to view your emails.</p>
-          <p>This window can be safely closed.</p>
-        </div>
-      </body>
-    </html>
-    """
-
-# =========================
-# Endpoints
-# =========================
-
-@app.get("/", response_class=PlainTextResponse)
-async def root() -> str:
-    """
-    Basic health check endpoint.
-
-    Returns:
-        str: Status message.
-    """
-    return "Gmail OAuth server is running."
-
-@app.get("/oauth/start")
-async def oauth_start(request: Request, telegram_id: int):
-    """
-    Starts the OAuth flow for a specific Telegram user.
-
-    Args:
-        request (Request): Incoming HTTP request.
-        telegram_id (int): Telegram user's unique ID passed as state.
-
-    Returns:
-        RedirectResponse: Redirects the user to Google's OAuth consent page.
-    """
-    flow = _build_flow()
-
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        state=str(telegram_id),
         prompt="consent",
     )
 
+    STATE_TO_TELEGRAM[state] = telegram_id
+
     return RedirectResponse(auth_url)
 
-@app.get("/oauth/callback", response_class=HTMLResponse)
-async def oauth_callback(request: Request):
+
+@app.get("/callback", response_class=HTMLResponse)
+async def oauth_callback(request: Request) -> HTMLResponse:
     """
-    Handles the callback from Google after user consent.
-
-    Args:
-        request (Request): Incoming callback request containing the authorization response.
-
-    Returns:
-        HTMLResponse: Confirmation page upon successful authorization.
-
-    Raises:
-        HTTPException: If the state is missing or token retrieval fails.
+    Callback endpoint after user authorizes the application with Google.
     """
-    telegram_id_str = request.query_params.get("state")
-    if not telegram_id_str:
-        raise HTTPException(status_code=400, detail="Missing state parameter")
+    params = dict(request.query_params)
+    state: Optional[str] = params.get("state")
+    if not state:
+        return HTMLResponse(html.error_html("Missing state parameter from Google."), status_code=400)
+
+    telegram_id = STATE_TO_TELEGRAM.pop(state, None)
+    if telegram_id is None:
+        return HTMLResponse(
+            html.error_html("Unable to match state with a Telegram user."),
+            status_code=400,
+        )
+
+    redirect_uri = f"{cfg.GMAIL_OAUTH_BASE_URL}/callback"
+
+    flow = Flow.from_client_secrets_file(
+        str(cfg.GOOGLE_CLIENT_SECRET_PATH),
+        scopes=cfg.SCOPES,
+        redirect_uri=redirect_uri,
+        state=state,
+    )
 
     try:
-        telegram_id = int(telegram_id_str)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid state value")
-
-    flow = _build_flow()
-
-    try:
-        flow.fetch_token(authorization_response=str(request.url))
+        authorization_response = str(request.url)
+        flow.fetch_token(authorization_response=authorization_response)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch token: {exc}") from exc
+        return HTMLResponse(
+            html.error_html(f"Failed to fetch token from Google: {exc}"),
+            status_code=400,
+        )
 
     creds: Credentials = flow.credentials
 
-    gmail_address: str | None = None
+    gmail_address: Optional[str] = None
     if creds.id_token and isinstance(creds.id_token, dict):
         gmail_address = creds.id_token.get("email")
 
-    save_gmail_credentials(telegram_id, creds, gmail_address)
+    try:
+        save_gmail_credentials(telegram_id, creds, gmail_address)
+    except Exception as exc:
+        return HTMLResponse(
+            html.error_html(f"Token received but failed to save to database: {exc}"),
+            status_code=500,
+        )
 
-    return HTMLResponse(_success_html())
+    return HTMLResponse(html.success_html())
+
+
+@app.get("/health", response_class=PlainTextResponse)
+async def health() -> str:
+    """
+    Simple health check endpoint.
+    """
+    return "ok"
