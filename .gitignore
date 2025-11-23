@@ -166,10 +166,6 @@ Dev_requirements.txt
 # OS junk
 .DS_Store
 Thumbs.db
-*.db
 
 # Generated env info 
 env-info.txt
-
-credentials.json
-token.json
