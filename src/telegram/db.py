@@ -5,13 +5,13 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-# مسار قاعدة البيانات في جذر المشروع (مثل L:/telegram/telegram_data.db)
-BASE_DIR = Path(__file__).resolve().parents[2]  # src/telegram/db.py → .. → .. = جذر المشروع
+# Path to the project root: src/telegram/db.py → ../.. = project root
+BASE_DIR = Path(__file__).resolve().parents[2]
 DB_PATH = BASE_DIR / "telegram_data.db"
 
 
 # =========================
-#  اتصال عام
+#  Database Connection
 # =========================
 
 def _get_conn() -> sqlite3.Connection:
@@ -21,18 +21,18 @@ def _get_conn() -> sqlite3.Connection:
 
 
 # =========================
-#  إنشاء الجداول
+#  Table Creation
 # =========================
 
 def init_db() -> None:
     """
-    إنشاء جداول users و messages إذا لم تكن موجودة.
-    مع دعم عمود bot_profile لتمييز البوت.
+    Create tables `users` and `messages` if they do not exist.
+    Adds `bot_profile` column if missing.
     """
     conn = _get_conn()
     cur = conn.cursor()
 
-    # ----- جدول users -----
+    # Create users table
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -49,14 +49,13 @@ def init_db() -> None:
         """
     )
 
-    # محاولة إضافة عمود bot_profile لو لم يكن موجودًا
+    # Try to add bot_profile column
     try:
         cur.execute("ALTER TABLE users ADD COLUMN bot_profile TEXT")
     except sqlite3.OperationalError:
-        # العمود موجود مسبقًا أو SQLite لا يسمح، نتجاهل
         pass
 
-    # ----- جدول messages -----
+    # Create messages table
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS messages (
@@ -69,7 +68,6 @@ def init_db() -> None:
         """
     )
 
-    # محاولة إضافة عمود bot_profile لو لم يكن موجودًا
     try:
         cur.execute("ALTER TABLE messages ADD COLUMN bot_profile TEXT")
     except sqlite3.OperationalError:
@@ -80,7 +78,7 @@ def init_db() -> None:
 
 
 # =========================
-#  helpers لتواريخ
+#  Date Helpers
 # =========================
 
 def _now_str() -> str:
@@ -88,7 +86,7 @@ def _now_str() -> str:
 
 
 # =========================
-#  users
+#  Users Table Operations
 # =========================
 
 def upsert_user(
@@ -101,8 +99,8 @@ def upsert_user(
     bot_profile: Optional[str] = None,
 ) -> None:
     """
-    إضافة/تحديث مستخدم بناءً على chat_id.
-    يتم أيضاً حفظ bot_profile لنعرف أي بوت تعامل معه.
+    Insert or update a user based on `chat_id`.
+    Also records the `bot_profile` to distinguish which bot interacted.
     """
     conn = _get_conn()
     cur = conn.cursor()
@@ -147,7 +145,7 @@ def upsert_user(
 
 def upsert_user_from_chat(chat: Any, bot_profile: Optional[str] = None) -> None:
     """
-    راحة: تستقبل telegram.Chat مباشرة من البوت.
+    Convenience function: receives a `telegram.Chat` instance directly.
     """
     upsert_user(
         chat_id=chat.id,
@@ -162,7 +160,10 @@ def upsert_user_from_chat(chat: Any, bot_profile: Optional[str] = None) -> None:
 
 def get_all_users() -> List[Dict[str, Any]]:
     """
-    جلب كل المستخدمين المخزّنين في DB.
+    Retrieve all users from the database.
+
+    Returns:
+        List[Dict[str, Any]]: List of user records.
     """
     conn = _get_conn()
     cur = conn.cursor()
@@ -189,7 +190,7 @@ def get_all_users() -> List[Dict[str, Any]]:
 
 
 # =========================
-#  messages
+#  Messages Table Operations
 # =========================
 
 def add_message(
@@ -199,8 +200,13 @@ def add_message(
     bot_profile: Optional[str] = None,
 ) -> None:
     """
-    تخزين رسالة (in من المستخدم – out من البوت).
-    direction: 'in' أو 'out'
+    Store a message (in from user – out from bot).
+
+    Args:
+        chat_id (int): Telegram chat ID.
+        direction (str): 'in' or 'out'.
+        text (Optional[str]): Message content.
+        bot_profile (Optional[str]): Associated bot profile.
     """
     conn = _get_conn()
     cur = conn.cursor()
@@ -225,7 +231,14 @@ def add_message(
 
 def get_messages_for_chat(chat_id: int, limit: int = 50) -> List[Dict[str, Any]]:
     """
-    جلب آخر N رسالة لمحادثة معيّنة.
+    Retrieve the last `limit` messages for a given chat ID.
+
+    Args:
+        chat_id (int): Telegram chat ID.
+        limit (int): Number of recent messages to retrieve.
+
+    Returns:
+        List[Dict[str, Any]]: List of message records.
     """
     conn = _get_conn()
     cur = conn.cursor()

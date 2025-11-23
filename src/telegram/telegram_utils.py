@@ -1,4 +1,3 @@
-# telegram_utils.py (DYNAMIC VERSION)
 from __future__ import annotations
 
 import os
@@ -7,17 +6,17 @@ from typing import Any, Dict, List, Optional
 import requests
 from dotenv import load_dotenv
 
-# نحاول تحميل أي .env موجود (في الجذر مثلاً)
-# التطبيقات التي لديها .env خاص بها يجب أن تستدعي load_dotenv(dotenv_path=...) قبل الاستخدام.
+# Attempt to load any existing .env file (e.g., at the root level)
+# Applications with specific .env paths should call load_dotenv(dotenv_path=...) beforehand.
 load_dotenv()
 
 
-# ========= أدوات داخلية =========
+# ========= Internal Utilities =========
 
 def _get_token() -> Optional[str]:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        print("❌ TELEGRAM_BOT_TOKEN is missing in environment.")
+        print("TELEGRAM_BOT_TOKEN is missing in environment.")
         return None
     return token
 
@@ -29,8 +28,8 @@ def _post(
     timeout: int = 30,
 ) -> Optional[Dict[str, Any]]:
     """
-    استدعاء أي ميثود في Telegram Bot API باستخدام POST.
-    يقرأ TELEGRAM_BOT_TOKEN في كل مرة ديناميكياً.
+    Call any Telegram Bot API method via POST.
+    The token is fetched dynamically from the environment each time.
     """
     token = _get_token()
     if not token:
@@ -83,7 +82,7 @@ def _get_group_id() -> Optional[str]:
 
 
 # =========================
-#  🟢 TEXT MESSAGES
+#  TEXT MESSAGES
 # =========================
 
 def send_text(
@@ -124,7 +123,7 @@ def send_html(
 
 
 # =========================
-#  🟢 SHORTCUTS (ME / CHANNEL / GROUP)
+#  SHORTCUTS (ME / CHANNEL / GROUP)
 # =========================
 
 def send_to_me(text: str) -> Optional[Dict[str, Any]]:
@@ -156,7 +155,7 @@ def broadcast(chat_ids: List[int | str], text: str) -> List[Optional[Dict[str, A
 
 
 # =========================
-#  🖼 IMAGES & FILES
+#  IMAGES & FILES
 # =========================
 
 def send_photo(
@@ -227,7 +226,7 @@ def send_video(
 
 
 # =========================
-#  ✏️ EDIT / DELETE / PIN
+#  EDIT / DELETE / PIN
 # =========================
 
 def edit_message_text(
@@ -275,21 +274,20 @@ def unpin_message(
 
 
 # =========================
-#  🚨 ERROR ALERTS
+#  ERROR ALERTS
 # =========================
 
 def send_error_alert(message: str) -> Optional[Dict[str, Any]]:
     """
-    إرسال تنبيه خطأ إلى TELEGRAM_ME_ID (حسابك الشخصي).
+    Send an error alert to TELEGRAM_ME_ID (your personal Telegram ID).
     """
     me_id = _get_me_id()
     if not me_id:
         return None
-    text = f"🚨 ERROR ALERT:\n{message}"
+    text = f"ERROR ALERT:\n{message}"
     return send_text(me_id, text)
 
 
 # ============================================================
 # Legacy / test IDs (needed by tests.test_pro_features)
 # ============================================================
-

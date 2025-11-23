@@ -6,49 +6,47 @@ import streamlit as st
 
 from ...db import get_all_users, get_messages_for_chat
 
-
 def render_tab_users() -> None:
     """
-    تبويب عرض المستخدمين:
-    - يعرض فقط المستخدمين الذين لهم نفس bot_profile الخاص بهذه الواجهة
-      (المأخوذ من BOT_PROFILE في ملف .env).
-    - لا يظهر أي مستخدمين من بوتات أخرى.
+    Renders the Users tab:
+    - Displays only users associated with the current bot profile
+      as specified by BOT_PROFILE in the .env file.
+    - Filters out users from other bot profiles.
     """
 
-    st.header("👥 Users Who Contacted the Bot")
+    st.header("Users Who Contacted the Bot")
 
-    # 1) قراءة البروفايل الحالي من .env
+    # Read current bot profile from .env
     current_profile = os.getenv("BOT_PROFILE")
     if not current_profile:
         st.error(
-            "❌ BOT_PROFILE غير مضبوط في ملف .env لهذه الواجهة.\n"
-            "ضع مثلاً: BOT_PROFILE=quran أو BOT_PROFILE=gmail ثم أعد تشغيل اللوحة."
+            "BOT_PROFILE is not set in the .env file.\n"
+            "Set it to a value like BOT_PROFILE=quran or BOT_PROFILE=gmail and restart the panel."
         )
         return
 
-    # 2) جلب كل المستخدمين من قاعدة البيانات
+    # Fetch all users from the database
     users = get_all_users()
     if not users:
-        st.info("لم يتم تسجيل أي مستخدم بعد في قاعدة البيانات.")
+        st.info("No users have been recorded in the database yet.")
         return
 
-    # 3) فلترة المستخدمين حسب البوت الحالي فقط
+    # Filter users by current bot profile
     filtered_users = [
         u for u in users if (u.get("bot_profile") or "") == current_profile
     ]
 
-    st.caption(f"عرض المستخدمين لبروفايل البوت الحالي: `{current_profile}`")
+    st.caption(f"Displaying users for current bot profile: `{current_profile}`")
 
     if not filtered_users:
         st.info(
-            "لا يوجد مستخدمون مسجّلون لهذا البوت بعد.\n"
-            "جرّب أن ترسل رسالة لهذا البوت من تيليجرام ثم أعد فتح الصفحة."
+            "No users are registered for this bot yet.\n"
+            "Try messaging the bot on Telegram, then refresh this page."
         )
         return
 
-    # 4) عرض جدول المستخدمين
-    st.subheader("قائمة المستخدمين")
-
+    # Display users in a table
+    st.subheader("User List")
     st.dataframe(
         [
             {
@@ -65,23 +63,20 @@ def render_tab_users() -> None:
         use_container_width=True,
     )
 
-    # 5) عرض رسائل مستخدم معيّن (من نفس البوت فقط)
+    # Show messages for a selected user
     st.markdown("---")
-    st.subheader("📨 Messages for a specific user")
+    st.subheader("Messages for a Specific User")
 
     chat_ids = [u["chat_id"] for u in filtered_users]
-    selected_chat_id = st.selectbox("اختر chat_id:", chat_ids)
+    selected_chat_id = st.selectbox("Select a chat_id:", chat_ids)
 
     if selected_chat_id:
         msgs = get_messages_for_chat(int(selected_chat_id), limit=50)
         if not msgs:
-            st.info("لا توجد رسائل محفوظة لهذا المستخدم بعد.")
+            st.info("No messages recorded for this user.")
         else:
-            # نضمن أننا نعرض رسائل هذا البوت فقط
             msgs = [
-                m
-                for m in msgs
-                if (m.get("bot_profile") or "") == current_profile
+                m for m in msgs if (m.get("bot_profile") or "") == current_profile
             ]
 
             for m in reversed(msgs):

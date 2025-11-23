@@ -11,41 +11,39 @@ from google.oauth2.credentials import Credentials
 
 from src.telegram.user_store import init_db, save_gmail_credentials
 
-
 # =========================
-# إعدادات عامة
+# General Settings
 # =========================
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# ملف بيانات تطبيق Google OAuth (حمّلته من Google Cloud Console)
+# Path to the Google OAuth credentials file (downloaded from Google Cloud Console)
 CREDENTIALS_FILE = BASE_DIR / "credentials.json"
 
-# الصلاحيات المطلوبة من Gmail
+# Required Gmail scopes
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
-# عنوان الـ callback المسجل في Google Cloud
-# يمكنك تغييره من متغير البيئة إذا أردت استخدام 192.168.1.100 مثلًا
+# Callback URL registered in Google Cloud
 REDIRECT_URI = os.getenv(
     "GMAIL_OAUTH_REDIRECT_URI",
     "http://localhost:8001/oauth/callback",
 )
 
-# تأكد أن قاعدة البيانات موجودة
+# Ensure the database is initialized
 init_db()
 
 app = FastAPI(title="Gmail OAuth Server")
-
 
 # =========================
 # Helpers
 # =========================
 
-
 def _build_flow() -> Flow:
     """
-    يبني كائن Flow من ملف credentials.json مع الصلاحيات المطلوبة.
-    لا نستخدم flow.params هنا (غير مدعوم في النسخ الجديدة).
+    Build a Flow object from the credentials file with the specified scopes.
+
+    Returns:
+        Flow: Google OAuth2 Flow instance configured for Gmail access.
     """
     flow = Flow.from_client_secrets_file(
         str(CREDENTIALS_FILE),
@@ -54,16 +52,21 @@ def _build_flow() -> Flow:
     )
     return flow
 
-
 def _success_html() -> str:
+    """
+    HTML content displayed after successful Gmail account linking.
+
+    Returns:
+        str: HTML response content.
+    """
     return """
-    <html dir="rtl" lang="ar">
+    <html dir=\"rtl\" lang=\"ar\">
       <head>
-        <meta charset="utf-8" />
+        <meta charset=\"utf-8\" />
         <title>تم ربط Gmail بنجاح</title>
         <style>
           body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
             background-color: #0f172a;
             color: #e5e7eb;
             display: flex;
@@ -95,57 +98,67 @@ def _success_html() -> str:
         </style>
       </head>
       <body>
-        <div class="card">
-          <div class="emoji">✅</div>
-          <h1>تم ربط حساب Gmail بنجاح</h1>
-          <p>يمكنك الآن العودة إلى تيلجرام وكتابة الأمر <code>/gmail</code> لقراءة رسائلك.</p>
-          <p>يمكن إغلاق هذه النافذة بأمان.</p>
+        <div class=\"card\">
+          <div class=\"emoji\">✅</div>
+          <h1>Gmail account successfully linked</h1>
+          <p>You can now return to Telegram and use the <code>/gmail</code> command to view your emails.</p>
+          <p>This window can be safely closed.</p>
         </div>
       </body>
     </html>
     """
 
-
 # =========================
 # Endpoints
 # =========================
 
-
 @app.get("/", response_class=PlainTextResponse)
 async def root() -> str:
-    return "Gmail OAuth server is running."
+    """
+    Basic health check endpoint.
 
+    Returns:
+        str: Status message.
+    """
+    return "Gmail OAuth server is running."
 
 @app.get("/oauth/start")
 async def oauth_start(request: Request, telegram_id: int):
     """
-    يبدأ تدفق OAuth لمستخدم تيلجرام معيّن.
-    - نرسل المستخدم إلى صفحة Google مع state = telegram_id.
+    Starts the OAuth flow for a specific Telegram user.
+
+    Args:
+        request (Request): Incoming HTTP request.
+        telegram_id (int): Telegram user's unique ID passed as state.
+
+    Returns:
+        RedirectResponse: Redirects the user to Google's OAuth consent page.
     """
-    # نبني الـ Flow
     flow = _build_flow()
 
-    # نمرّر telegram_id داخل state
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        state=str(telegram_id),  # 👈 هنا تم تمرير state بشكل صحيح
+        state=str(telegram_id),
         prompt="consent",
     )
 
-    # إعادة توجيه المستخدم مباشرة إلى Google
     return RedirectResponse(auth_url)
-
 
 @app.get("/oauth/callback", response_class=HTMLResponse)
 async def oauth_callback(request: Request):
     """
-    يستقبل الرد من Google بعد الموافقة.
-    - نقرأ state (الذي يحتوي telegram_id)
-    - نجلب التوكن
-    - نخزّنه في قاعدة البيانات
+    Handles the callback from Google after user consent.
+
+    Args:
+        request (Request): Incoming callback request containing the authorization response.
+
+    Returns:
+        HTMLResponse: Confirmation page upon successful authorization.
+
+    Raises:
+        HTTPException: If the state is missing or token retrieval fails.
     """
-    # state يجب أن يحتوي telegram_id الذي أرسلناه في /oauth/start
     telegram_id_str = request.query_params.get("state")
     if not telegram_id_str:
         raise HTTPException(status_code=400, detail="Missing state parameter")
@@ -155,26 +168,19 @@ async def oauth_callback(request: Request):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid state value")
 
-    # نبني Flow جديد بنفس الإعدادات
     flow = _build_flow()
 
-    # نجلب التوكن من Google بالاعتماد على رابط الاستدعاء الكامل
     try:
         flow.fetch_token(authorization_response=str(request.url))
-    except Exception as exc:  # pragma: no cover - للتشخيص فقط
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to fetch token: {exc}") from exc
 
     creds: Credentials = flow.credentials
 
-    # email غالبًا موجود في id_token، وإن لم يوجد يمكن تجاهله
     gmail_address: str | None = None
     if creds.id_token and isinstance(creds.id_token, dict):
         gmail_address = creds.id_token.get("email")
 
-    # نحفظ بيانات الاعتماد في قاعدة البيانات (تابع التوقيع الموجود عندك في user_store)
-    # هنا نفترض أن save_gmail_credentials يقبل:
-    #   (telegram_id: int, creds: Credentials, email: Optional[str])
     save_gmail_credentials(telegram_id, creds, gmail_address)
 
-    # صفحة نجاح بسيطة للمستخدم
     return HTMLResponse(_success_html())

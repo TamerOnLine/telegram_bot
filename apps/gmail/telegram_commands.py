@@ -21,33 +21,30 @@ from googleapiclient.discovery import build
 
 from src.telegram.user_store import get_gmail_credentials_row
 
-
 # ======================
-# إعدادات عامة
+# General Configuration
 # ======================
 
-# عنوان سيرفر OAuth (نفسه الموجود في oauth_server.py)
-# يمكنك تغييره في .env إلى دومين خارجي إذا استخدمت ngrok / Cloudflare
+# Base URL for the OAuth server (should match the one in oauth_server.py)
 GMAIL_OAUTH_BASE_URL = os.getenv("GMAIL_OAUTH_BASE_URL", "http://localhost:8001")
 
-
 # ======================
-# أوامر البوت
+# Bot Command Handlers
 # ======================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    رسالة ترحيب + كيبورد أوامر أسفل الشاشة.
+    Sends a welcome message with a command keyboard.
     """
     msg = update.effective_message
 
     text = (
-        "📬 Gmail Bot في تليجرام\n\n"
-        "هذا البوت متصل بحساب Gmail عبر OAuth.\n\n"
-        "الأوامر المتاحة:\n"
-        "• /link_gmail  لربط حساب Gmail الخاص بك.\n"
-        "• /gmail       لعرض آخر الرسائل في بريدك الوارد.\n\n"
-        "تذكّر: يجب أن يكون سيرفر OAuth شغّال على جهازك."
+        "Gmail Bot on Telegram\n\n"
+        "This bot connects to your Gmail account using OAuth.\n\n"
+        "Available commands:\n"
+        "\u2022 /link_gmail  to link your Gmail account.\n"
+        "\u2022 /gmail       to view your latest inbox messages.\n\n"
+        "Note: Ensure the OAuth server is running on your machine."
     )
 
     keyboard = ReplyKeyboardMarkup(
@@ -61,47 +58,49 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_link_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    يبدأ عملية ربط Gmail لمستخدم تيلجرام معيّن.
-    يرسل له زر + رابط OAuth يحتوي على telegram_id.
+    Initiates the Gmail linking process for a Telegram user.
+    Sends a button with the OAuth URL containing the telegram_id.
     """
     user = update.effective_user
     msg = update.effective_message
 
     if not user:
-        await msg.reply_text("❌ لم أستطع تحديد المستخدم.")
+        await msg.reply_text("Unable to identify the user.")
         return
 
     telegram_id = user.id
 
-    # نبني رابط /oauth/start مع تمرير telegram_id
     base = GMAIL_OAUTH_BASE_URL.rstrip("/")
     auth_url = f"{base}/oauth/start?telegram_id={telegram_id}"
 
     text = (
-        "🔗 ربط حساب Gmail (تجربة محلية)\n\n"
-        "1️⃣ تأكد أن سيرفر OAuth يعمل على جهازك.\n"
-        "2️⃣ اضغط الزر في الأسفل لفتح صفحة ربط Gmail،\n"
-        "   أو افتح هذا الرابط في المتصفح على نفس الجهاز:\n\n"
+        "Link your Gmail account (Local Setup)\n\n"
+        "1. Ensure the OAuth server is running.\n"
+        "2. Click the button below or open the URL in a browser on the same machine:\n\n"
         f"{auth_url}\n\n"
-        "3️⃣ بعد إكمال الربط بنجاح، عد إلى هنا واكتب الأمر /gmail لقراءة الرسائل."
+        "3. Once linked successfully, return here and type /gmail to read your emails."
     )
 
-    # زر تفاعلي لفتح الرابط
     keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔐 فتح صفحة ربط Gmail", url=auth_url)]]
+        [[InlineKeyboardButton("Open Gmail Link Page", url=auth_url)]]
     )
 
     await msg.reply_text(text, reply_markup=keyboard)
 
 
 # ======================
-# التعامل مع بيانات Gmail
+# Gmail Credential Handling
 # ======================
 
 def _build_user_credentials(telegram_id: int) -> Optional[Credentials]:
     """
-    إعادة بناء Credentials من البيانات المخزنة في قاعدة البيانات.
-    نعتمد على الدالة get_gmail_credentials_row من user_store.py
+    Rebuilds Gmail Credentials from the stored database values.
+
+    Args:
+        telegram_id (int): Telegram user ID.
+
+    Returns:
+        Optional[Credentials]: OAuth2 credentials or None if invalid/missing.
     """
     row = get_gmail_credentials_row(telegram_id)
     if not row:
@@ -131,13 +130,13 @@ def _build_user_credentials(telegram_id: int) -> Optional[Credentials]:
 
 async def cmd_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    يعرض آخر 5 رسائل من Gmail للمستخدم الذي ربط حسابه.
+    Displays the latest 5 Gmail messages for a user with linked credentials.
     """
     user = update.effective_user
     msg = update.effective_message
 
     if not user:
-        await msg.reply_text("❌ لم أستطع تحديد المستخدم.")
+        await msg.reply_text("Unable to identify the user.")
         return
 
     telegram_id = user.id
@@ -145,8 +144,8 @@ async def cmd_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not creds:
         await msg.reply_text(
-            "❌ لا يوجد حساب Gmail مربوط بهذا المستخدم.\n"
-            "استخدم الأمر /link_gmail أولًا لربط حسابك."
+            "No Gmail account is linked to this user.\n"
+            "Use the /link_gmail command to link your account."
         )
         return
 
@@ -160,15 +159,15 @@ async def cmd_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             .execute()
         )
         messages = result.get("messages", [])
-    except Exception as exc:  # شبكة / OAuth
-        await msg.reply_text(f"⚠️ حدث خطأ أثناء الاتصال بـ Gmail:\n{exc}")
+    except Exception as exc:
+        await msg.reply_text(f"An error occurred while connecting to Gmail:\n{exc}")
         return
 
     if not messages:
-        await msg.reply_text("📭 لا توجد رسائل حديثة في البريد الوارد.")
+        await msg.reply_text("No recent messages in your inbox.")
         return
 
-    lines: list[str] = ["📧 آخر 5 رسائل في بريدك الوارد:\n"]
+    lines: list[str] = ["Latest 5 messages in your inbox:\n"]
 
     for m in messages:
         full = (
@@ -186,20 +185,23 @@ async def cmd_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             h["name"]: h["value"]
             for h in full.get("payload", {}).get("headers", [])
         }
-        subject = headers.get("Subject", "(بدون عنوان)")
-        sender = headers.get("From", "(غير معروف)")
-        lines.append(f"• {subject}\n  من: {sender}\n")
+        subject = headers.get("Subject", "(No Subject)")
+        sender = headers.get("From", "(Unknown Sender)")
+        lines.append(f"\u2022 {subject}\n  From: {sender}\n")
 
     await msg.reply_text("\n".join(lines))
 
 
 # ======================
-# تسجيل الهاندلرز في الـ Application
+# Registering Handlers
 # ======================
 
 def register_handlers(app: Application) -> None:
     """
-    استدعِ هذه الدالة من app.py لتسجيل أوامر Gmail في البوت.
+    Register Gmail command handlers with the bot application.
+
+    Args:
+        app (Application): Telegram bot application instance.
     """
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("link_gmail", cmd_link_gmail))

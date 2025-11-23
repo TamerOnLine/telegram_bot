@@ -8,27 +8,33 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# صلاحيات القراءة فقط للبريد
+# Read-only permissions for Gmail
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
-# جذر المشروع: telegram/
+# Project root directory: telegram/
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# مجلد تطبيق الجيميل: telegram/apps/gmail/
+# Gmail application directory: telegram/apps/gmail/
 GMAIL_APP_DIR = PROJECT_ROOT / "apps" / "gmail"
 
 CREDENTIALS_FILE = GMAIL_APP_DIR / "credentials.json"
 TOKEN_FILE = GMAIL_APP_DIR / "token.json"
 
-
 def _get_service():
-    """إنشاء كائن خدمة Gmail API مع التعامل مع token.json تلقائيًا."""
+    """
+    Create and return a Gmail API service object.
+
+    Handles automatic loading, validation, and refreshing of the token file.
+    Initiates a new OAuth2 flow if no valid token exists.
+
+    Returns:
+        Resource: Authorized Gmail API service instance.
+    """
     creds: Credentials | None = None
 
     if TOKEN_FILE.exists():
         creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
 
-    # لو لا يوجد توكن أو انتهت صلاحيته → نعمل تسجيل دخول جديد
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
@@ -42,9 +48,17 @@ def _get_service():
 
     return build("gmail", "v1", credentials=creds)
 
-
 def get_last_emails(limit: int = 5) -> List[Dict[str, str]]:
-    """إرجاع آخر رسائل البريد (مختصرة) لاستخدامها في البوت أو Streamlit."""
+    """
+    Retrieve the latest emails with basic metadata.
+
+    Args:
+        limit (int): Maximum number of emails to retrieve.
+
+    Returns:
+        List[Dict[str, str]]: A list of email metadata including sender, subject, date,
+        snippet, and a direct Gmail web link.
+    """
     service = _get_service()
 
     res = service.users().messages().list(
