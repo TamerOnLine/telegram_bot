@@ -1,30 +1,84 @@
 from __future__ import annotations
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
 
 from .config import BOT_TOKEN, BOT_NAME, logger
-from .commands import (
-    cmd_start, cmd_help, cmd_set_role_student, cmd_set_role_teacher,
-    cmd_set_goal, cmd_my_goal, cmd_today
+from .handlers import (
+    start,
+    help_cmd,
+    my_goal,
+    today,
+    menu_buttons,
+    set_goal_entry,
+    set_goal_surah,
+    set_goal_start,
+    set_goal_end,
+    set_goal_days,
+    set_goal_confirm,
+    set_goal_cancel,
+    SET_SURAH,
+    SET_START,
+    SET_END,
+    SET_DAYS,
+    CONFIRM,
 )
-from .handlers import handle_text
 
 
-def main():
-    logger.info("Starting bot: %s", BOT_NAME)
+def main() -> None:
+    logger.info("Starting Quran Hifz bot...")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .application_name(BOT_NAME)
+        .build()
+    )
 
-    # Commands
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("set_role_student", cmd_set_role_student))
-    app.add_handler(CommandHandler("set_role_teacher", cmd_set_role_teacher))
-    app.add_handler(CommandHandler("set_goal", cmd_set_goal))
-    app.add_handler(CommandHandler("my_goal", cmd_my_goal))
-    app.add_handler(CommandHandler("today", cmd_today))
+    # أوامر بسيطة
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("my_goal", my_goal))
+    app.add_handler(CommandHandler("today", today))
 
-    # Text messages
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    # أزرار القائمة
+    app.add_handler(
+        CallbackQueryHandler(
+            menu_buttons, pattern="^(set_goal|today|my_goal|help)$"
+        )
+    )
+
+    # محادثة /set_goal
+    conv = ConversationHandler(
+        entry_points=[CommandHandler("set_goal", set_goal_entry)],
+        states={
+            SET_SURAH: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_goal_surah)
+            ],
+            SET_START: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_goal_start)
+            ],
+            SET_END: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_goal_end)
+            ],
+            SET_DAYS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_goal_days)
+            ],
+            CONFIRM: [
+                CallbackQueryHandler(
+                    set_goal_confirm, pattern="^(confirm_goal|cancel_goal)$"
+                )
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", set_goal_cancel)],
+    )
+    app.add_handler(conv)
 
     app.run_polling()
 
