@@ -11,10 +11,16 @@ class HifzGoal:
     start_ayah: int
     end_ayah: int
     days: int
-    start_date: str  # ISO: YYYY-MM-DD
+    start_date: str  # ISO format: YYYY-MM-DD
 
     @property
     def total_ayahs(self) -> int:
+        """
+        Calculate the total number of ayahs in the goal.
+
+        Returns:
+            int: Total ayah count.
+        """
         return max(0, self.end_ayah - self.start_ayah + 1)
 
 
@@ -22,8 +28,17 @@ def compute_today_portion(
     goal: HifzGoal, today: date | None = None
 ) -> Tuple[int, int, bool]:
     """
-    يرجع (from_ayah, to_ayah, finished_today)
-    finished_today = True إذا انتهى المستخدم من الهدف.
+    Compute the ayahs to be memorized for today based on the goal.
+
+    Args:
+        goal (HifzGoal): The memorization goal.
+        today (date | None): The current date. Defaults to today.
+
+    Returns:
+        Tuple[int, int, bool]:
+            from_ayah (int): Starting ayah for today.
+            to_ayah (int): Ending ayah for today.
+            finished (bool): True if the goal is completed.
     """
     if today is None:
         today = date.today()
@@ -34,7 +49,7 @@ def compute_today_portion(
         days_passed = 0
 
     total = goal.total_ayahs
-    per_day = max(1, (total + goal.days - 1) // goal.days)  # ceil(total/days)
+    per_day = max(1, (total + goal.days - 1) // goal.days)  # Ceiling division
 
     start_offset = days_passed * per_day
     if start_offset >= total:

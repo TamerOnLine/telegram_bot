@@ -20,18 +20,24 @@ from .handlers import (
 
 
 def main() -> None:
+    """
+    Entry point for the shop bot.
+
+    Initializes the Telegram application, registers command and callback handlers,
+    and starts polling for updates.
+    """
     logger.info("Starting bot: %s", BOT_NAME)
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # أوامر
+    # Commands
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("products", cmd_products))
     app.add_handler(CommandHandler("cart", cmd_cart))
     app.add_handler(CommandHandler("clear", cmd_clear))
     app.add_handler(CommandHandler("checkout", cmd_checkout))
 
-    # أزرار
+    # Callback buttons
     app.add_handler(CallbackQueryHandler(product_details, pattern=r"^prod:"))
     app.add_handler(CallbackQueryHandler(add_to_cart, pattern=r"^add:"))
     app.add_handler(CallbackQueryHandler(back_to_products, pattern=r"^back:products$"))

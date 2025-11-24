@@ -1,19 +1,19 @@
-from typing import Dict
+from typing import Dict, Union
 
-PRODUCTS: Dict[str, Dict[str, str | int | float]] = {
+PRODUCTS: Dict[str, Dict[str, Union[str, int, float]]] = {
     "p1": {
-        "name": "📱 كفر جوال",
+        "name": "Phone Case",
         "price": 9.99,
-        "description": "كفر حماية بسيط وخفيف.",
+        "description": "A simple, lightweight protective case."
     },
     "p2": {
-        "name": "🎧 سماعات",
+        "name": "Wired Earphones",
         "price": 19.5,
-        "description": "سماعات سلكية بصوت واضح.",
+        "description": "Clear sound wired earphones."
     },
     "p3": {
-        "name": "🔌 شاحن USB",
+        "name": "USB Charger",
         "price": 7.0,
-        "description": "شاحن سريع 2A.",
+        "description": "2A fast USB charger."
     },
 }

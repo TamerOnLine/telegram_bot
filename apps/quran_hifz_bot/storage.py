@@ -9,6 +9,12 @@ from .models import HifzGoal
 
 
 def _load_all_goals() -> Dict[str, Any]:
+    """
+    Load all saved Hifz goals from the goals file.
+
+    Returns:
+        Dict[str, Any]: Dictionary of user IDs to goal data.
+    """
     if not GOALS_FILE.exists():
         return {}
     try:
@@ -18,12 +24,25 @@ def _load_all_goals() -> Dict[str, Any]:
 
 
 def _save_all_goals(data: Dict[str, Any]) -> None:
+    """
+    Save all Hifz goals to the goals file.
+
+    Args:
+        data (Dict[str, Any]): Dictionary of user goals to be saved.
+    """
     GOALS_FILE.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
 def save_goal(user_id: int, goal: HifzGoal) -> None:
+    """
+    Save a user's Hifz goal.
+
+    Args:
+        user_id (int): Telegram user ID.
+        goal (HifzGoal): Goal object to save.
+    """
     data = _load_all_goals()
     data[str(user_id)] = {
         "surah": goal.surah,
@@ -36,6 +55,15 @@ def save_goal(user_id: int, goal: HifzGoal) -> None:
 
 
 def load_goal(user_id: int) -> Optional[HifzGoal]:
+    """
+    Load a user's saved Hifz goal.
+
+    Args:
+        user_id (int): Telegram user ID.
+
+    Returns:
+        Optional[HifzGoal]: The loaded goal or None if not found.
+    """
     data = _load_all_goals()
     raw = data.get(str(user_id))
     if not raw:

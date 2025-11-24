@@ -20,13 +20,20 @@ ENV_PATH = BASE_DIR / ".env"
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /start command
+    Handle the /start command.
+
+    Args:
+        update (Update): Incoming update from Telegram.
+        context (ContextTypes.DEFAULT_TYPE): Context provided by the handler.
+
+    Returns:
+        None
     """
     user = update.effective_user
     name = user.first_name if user else "there"
 
     text = (
-        f"👋 Hello *{name}*!\n\n"
+        f"Hello *{name}*!\n\n"
         "This is a simple test bot from your new multi-bot project.\n"
         "You can duplicate this folder to create new bots."
     )
@@ -36,36 +43,41 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /ping command
+    Handle the /ping command.
+
+    Args:
+        update (Update): Incoming update from Telegram.
+        context (ContextTypes.DEFAULT_TYPE): Context provided by the handler.
+
+    Returns:
+        None
     """
-    await update.message.reply_text("🏓 Pong!")
+    await update.message.reply_text("Pong!")
 
 
 def main() -> None:
-    # 1) Setup logging
-    setup_logging()
+    """
+    Main entry point for the Telegram bot.
 
-    # 2) Load .env for this bot
+    Sets up logging, loads environment variables, builds the application,
+    registers command handlers, and starts polling.
+
+    Returns:
+        None
+    """
+    setup_logging()
     load_env(ENV_PATH)
 
-    # 3) Read token
     token = get_env("TELEGRAM_BOT_TOKEN")
     bot_name = get_env("BOT_NAME", "hello_bot")
 
     logging.getLogger(__name__).info("Starting bot: %s", bot_name)
 
-    # 4) Build application
-    app = (
-        ApplicationBuilder()
-        .token(token)
-        .build()
-    )
+    app = ApplicationBuilder().token(token).build()
 
-    # 5) Register handlers
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("ping", cmd_ping))
 
-    # 6) Run bot
     logging.getLogger(__name__).info("Bot is polling...")
     app.run_polling()
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # =========================
-# إعدادات عامة
+# General Configuration
 # =========================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -18,14 +18,14 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 BOT_NAME = os.getenv("BOT_NAME", "Quran Hifz Coach")
 GOALS_FILE = BASE_DIR / os.getenv("GOALS_FILE", "goals.json")
 
-# إعداد اللوجينغ
+# Logging Configuration
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,      # 👈 لا نستخدم DEBUG
+    level=logging.INFO,  # Avoid using DEBUG in production
 )
 logger = logging.getLogger(__name__)
 
-# 🔐 إخفاء أي روابط/Requests فيها التوكن
+# Suppress token leakage in request logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.vendor.ptb_urllib3.urllib3").setLevel(logging.WARNING)
 
