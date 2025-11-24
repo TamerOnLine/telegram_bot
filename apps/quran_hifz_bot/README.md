@@ -136,3 +136,132 @@ Handles saving and loading user goals.
 ## ✨ Developer
 
 Built by **TamerOnLine** – 2025
+
+
+---
+
+## ⚙️ Unified Systemd Template — Run Quran Hifz Bot (and Other Bots) Easily
+
+To simplify running the **Quran Hifz Coach Bot** (and any other bot inside this project) as a background service, you can use a single systemd **template unit** instead of creating a separate `.service` file for each bot.
+
+Instead of:
+
+- `quran_hifz_bot.service`  
+- `hello_bot.service`  
+- `shop_bot.service`  
+- `search_bot.service`  
+
+you use one template:
+
+```bash
+tg_bot@.service
+```
+
+Each bot runs as an *instance* of this template:
+
+```bash
+tg_bot@quran_hifz_bot
+tg_bot@hello_bot
+tg_bot@shop_bot
+tg_bot@search_bot
+```
+
+> The only requirement: each bot must live in `apps/<bot_name>/bot.py`.
+
+---
+
+### 🗂️ Template File Location
+
+Create the template file:
+
+```bash
+sudo nano /etc/systemd/system/tg_bot@.service
+```
+
+Add:
+
+```ini
+[Unit]
+Description=Telegram Bot (%i)
+After=network.target
+
+[Service]
+WorkingDirectory=/home/tamer/telegram_bot
+ExecStart=/home/tamer/telegram_bot/.venv/bin/python /home/tamer/telegram_bot/apps/%i/bot.py
+Restart=always
+RestartSec=3
+
+User=tamer
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`%i` is automatically replaced by systemd with the bot folder name under `apps/`.
+
+---
+
+### ▶️ Start Quran Hifz Bot Using the Template
+
+From now on, instead of a dedicated `quran_hifz_bot.service`, you simply run:
+
+```bash
+sudo systemctl enable --now tg_bot@quran_hifz_bot
+```
+
+This assumes the bot entry point is:
+
+```text
+/home/tamer/telegram_bot/apps/quran_hifz_bot/bot.py
+```
+
+You can start other bots in the same way:
+
+```bash
+sudo systemctl enable --now tg_bot@hello_bot
+sudo systemctl enable --now tg_bot@shop_bot
+sudo systemctl enable --now tg_bot@search_bot
+```
+
+---
+
+### 🔁 Restart After Code Updates
+
+Whenever you update the Quran Hifz bot code:
+
+```bash
+sudo systemctl restart tg_bot@quran_hifz_bot
+```
+
+---
+
+### 📜 View Logs
+
+To follow logs in real time:
+
+```bash
+journalctl -u tg_bot@quran_hifz_bot -f
+```
+
+---
+
+### 🧼 Disable or Stop the Bot
+
+```bash
+sudo systemctl stop tg_bot@quran_hifz_bot
+sudo systemctl disable tg_bot@quran_hifz_bot
+```
+
+---
+
+### 🎉 Benefits of This Template System
+
+- Run **unlimited bots** using a single systemd unit.  
+- No need for multiple `.service` files per bot.  
+- Cleaner, scalable server configuration.  
+- Bots restart automatically on crash.  
+- Bots auto-start on server reboot.  
+- Each bot remains isolated and independently controllable.
+
+---
