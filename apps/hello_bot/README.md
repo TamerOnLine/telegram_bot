@@ -159,3 +159,101 @@ sudo journalctl -u hello_bot -f
 ## ✨ Developer
 
 Created by **TamerOnLine** — 2025
+
+
+---
+
+## ⚙️ Unified Systemd Template — Run Unlimited Bots Easily
+
+To simplify running multiple bots inside the project, you can use **one single systemd template file** that automatically runs any bot based on its folder name.
+
+This replaces multiple service files like:
+
+```
+hello_bot.service
+quran_hifz_bot.service
+shop_bot.service
+search_bot.service
+```
+
+with just **one** template:
+
+```
+tg_bot@.service
+```
+
+Each bot becomes an instance:
+
+```
+tg_bot@hello_bot
+tg_bot@quran_hifz_bot
+tg_bot@search_bot
+```
+
+### 🗂️ Template File Location
+
+Create the file:
+
+```
+/etc/systemd/system/tg_bot@.service
+```
+
+Add:
+
+```
+[Unit]
+Description=Telegram Bot (%i)
+After=network.target
+
+[Service]
+WorkingDirectory=/home/tamer/telegram_bot
+ExecStart=/home/tamer/telegram_bot/.venv/bin/python /home/tamer/telegram_bot/apps/%i/bot.py
+Restart=always
+RestartSec=3
+
+User=tamer
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`%i` → is automatically replaced by the bot folder name under `apps/`.
+
+### ▶️ Start Any Bot Using the Template
+
+```
+sudo systemctl enable --now tg_bot@hello_bot
+sudo systemctl enable --now tg_bot@quran_hifz_bot
+sudo systemctl enable --now tg_bot@search_bot
+```
+
+### 🔁 Restart After Code Updates
+
+```
+sudo systemctl restart tg_bot@hello_bot
+```
+
+### 📜 View Logs
+
+```
+journalctl -u tg_bot@hello_bot -f
+```
+
+### 🧼 Disable or Stop a Bot
+
+```
+sudo systemctl stop tg_bot@hello_bot
+sudo systemctl disable tg_bot@hello_bot
+```
+
+### 🎉 Why This Template Is Better
+
+- Run unlimited bots  
+- No need for multiple .service files  
+- Clean scalable architecture  
+- Auto‑restart on crash  
+- Auto‑start on reboot  
+- Each bot is isolated and independent  
+
+---
