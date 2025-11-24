@@ -6,8 +6,8 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-from .config import BOT_TOKEN, BOT_NAME, logger
-from .handlers import (
+from config import BOT_TOKEN, BOT_NAME, logger
+from handlers import (
     cmd_start,
     cmd_products,
     cmd_cart,
