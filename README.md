@@ -1,25 +1,21 @@
-
 # Telegram Bot Suite — Multi-Bot Architecture
 
-A modular system that allows you to build, run, and manage unlimited Telegram bots inside one unified project, each bot with its own folder, configuration, environment, and systemd service.
-
-This project is ideal for:
-- Developers who want to host multiple bots on one machine.
-- Bots that must run 24/7 on Linux servers.
-- Projects requiring isolated environments per bot.
-- Scalable architectures where bots share shared core utilities.
+A professional, scalable system for building, running, and managing unlimited Telegram bots inside a single Python project.  
+Supports Python 3.12, python‑telegram‑bot 22+, Linux systemd, Windows/WSL, and includes a Streamlit management dashboard.
 
 ---
 
-## ✨ Key Features
-- Unlimited bots placed under `apps/<bot_name>/`
-- Each bot has its own `.env`, `bot.py`, handlers, config, etc.
-- Shared core modules for logging & environment management
-- python-telegram-bot v22+ (async)
-- Systemd support for persistent services
-- GitHub Actions CI included
-- Windows / Linux / WSL support
-- Modern Python packaging via pyproject.toml
+## 🚀 Why This Project?
+
+Developers often maintain multiple Telegram bots, each requiring:
+- Separate runtime
+- Separate .env file
+- Isolated logging
+- Independent configs
+- Systemd services
+- A unified control panel
+
+This system solves all of that by providing **one project** capable of hosting **unlimited fully isolated bots**, each inside its own folder.
 
 ---
 
@@ -29,120 +25,238 @@ This project is ideal for:
 telegram_bot/
 │
 ├── apps/
-│   ├── hello_bot/
-│   │   ├── bot.py
-│   │   └── .env
-│   │
-│   └── quran_hifz_bot/
-│       ├── bot.py
-│       ├── config.py
-│       ├── handlers.py
-│       ├── helpers.py
-│       ├── models.py
-│       ├── storage.py
-│       ├── README.md
-│       └── .env
+│   ├── hello_bot/              # Simple starter bot
+│   ├── quran_hifz_bot/         # Advanced Quran memorization bot
+│   └── shop_bot/               # Full e-commerce bot
+│
+├── apps/dashboard/             # Streamlit dashboard
+│   └── streamlit_app.py
 │
 ├── core/
-│   ├── env.py
-│   └── logging.py
+│   ├── env.py                  # Environment loader
+│   └── logging.py              # Global logging system
 │
 ├── tests/
-│   └── test_smoke.py
 │
+├── run.py
+├── run_bot.py
 ├── pyproject.toml
-└── run.py
+└── README.md
 ```
+
+---
+
+## ✨ Key Features
+
+### ✔ Multi‑Bot System  
+Each bot has:
+- Its own folder
+- bot.py
+- config.py
+- handlers
+- models
+- storage
+- its own `.env` file
+
+### ✔ Shared Core System  
+- `core/env.py` for safe environment loading  
+- `core/logging.py` for secure logging without leaking tokens  
+
+### ✔ Full Dashboard (Streamlit)
+- Detect all bots automatically  
+- Send test messages  
+- Manage systemd services  
+- View logs  
+- Get Chat IDs  
+
+### ✔ systemd Support  
+Each bot can run permanently as a Linux service.
+
+### ✔ CI Ready  
+GitHub Actions included.
+
+### ✔ Modern Python Stack  
+- Python 3.12  
+- Async  
+- PTB v22+  
+- dotenv  
+- Streamlit  
 
 ---
 
 ## 🛠 Installation
 
-### 1. Create virtual environment
+1. Create virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 2. Install dependencies
+2. Install project:
 ```bash
 pip install -e .
 ```
 
 ---
 
-## 🆕 Creating a New Bot
+## 🤖 Creating a New Bot
 
-Place your bot under:
+Create:
 
 ```
 apps/<bot_name>/
 ```
 
-With files:
+Example structure:
 ```
-bot.py
-.env
+apps/my_new_bot/
+│
+├── bot.py
+├── config.py
+├── handlers.py
+└── .env
 ```
 
 Example `.env`:
 ```
-TELEGRAM_BOT_TOKEN=YOUR_TOKEN
-BOT_NAME=hello_bot
+TELEGRAM_BOT_TOKEN=123456:ABCDEF
+BOT_NAME=my_new_bot
 ```
 
-Example bot:
+Minimal `bot.py`:
 ```python
-from telegram_bot_suite.base_bot import BaseTelegramBot
+from telegram.ext import ApplicationBuilder, CommandHandler
+from core.env import load_env, get_env
+from core.logging import setup_logging
+from pathlib import Path
 
-class HelloBot(BaseTelegramBot):
-    async def handle_message(self, update, context):
-        await update.message.reply_text("Hello!")
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+
+async def start(update, context):
+    await update.message.reply_text("Hello from my new bot!")
+
+def main():
+    setup_logging()
+    load_env(ENV_PATH)
+
+    token = get_env("TELEGRAM_BOT_TOKEN")
+
+    app = ApplicationBuilder().token(token).build()
+    app.add_handler(CommandHandler("start", start))
+
+    app.run_polling()
 
 if __name__ == "__main__":
-    HelloBot().run()
+    main()
 ```
 
 ---
 
-## ▶️ Running Bots
+## ▶️ Running Any Bot Locally
 
-### Run locally
+```bash
+python apps/<bot_name>/bot.py
+```
+
+Example:
 ```bash
 python apps/hello_bot/bot.py
 ```
 
-### Run as systemd service
-```bash
-sudo systemctl start hello_bot
-sudo systemctl enable hello_bot
-```
-
 ---
 
-## 🟢 Logs
+## 🟢 Running as systemd Service (Linux)
+
+1. Create service file:
+```bash
+sudo nano /etc/systemd/system/hello_bot.service
+```
+
+2. Add:
+```
+[Unit]
+Description=Hello Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=tamer
+WorkingDirectory=/home/tamer/telegram_bot
+ExecStart=/home/tamer/telegram_bot/.venv/bin/python /home/tamer/telegram_bot/apps/hello_bot/bot.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3. Enable & start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable hello_bot
+sudo systemctl start hello_bot
+```
+
+4. Logs:
 ```bash
 sudo journalctl -u hello_bot -f
 ```
 
 ---
 
-## ✨ Multiple Bots Supported
+## 🖥 Streamlit Dashboard
 
-Each bot lives in its own folder with its own configuration.
+Run:
+```bash
+streamlit run apps/dashboard/streamlit_app.py
+```
+
+The dashboard allows:
+- Bot selection
+- Token visibility (masked)
+- Sending messages
+- Getting Chat IDs
+- systemd control
+- Viewing logs
+
+---
+
+## 📌 Built‑in Bots
+
+### 1) hello_bot  
+Simple starter template.
+
+### 2) quran_hifz_bot  
+Advanced Quran memorization assistant with:
+- Goals  
+- Daily progress  
+- Menus  
+- Conversation handlers  
+- JSON storage  
+
+### 3) shop_bot  
+E‑commerce bot with:
+- Products  
+- Cart  
+- Checkout  
+- Admin notifications  
 
 ---
 
 ## 🧪 Tests
 
-Run the included test suite:
-
 ```bash
-python -m unittest discover -s tests
+python -m unittest discover -s tests -v
 ```
 
 ---
 
-## 📄 License
+## 📄 License  
 MIT License  
 © 2025 TamerOnLine
+
+---
+
+## ❤️ Developer  
+Created by **TamerOnLine**  
+Fully expandable — add as many bots and features as you need.

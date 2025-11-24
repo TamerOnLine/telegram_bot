@@ -1,8 +1,7 @@
-
-# Hello Bot — Simple Telegram Starter Bot
+# Hello Bot — Simple Starter Telegram Bot
 
 `hello_bot` is a minimal Telegram bot designed as a clean starter template inside the **Multi‑Bot Suite**.  
-It demonstrates loading `.env`, using shared core modules, defining simple commands, and running a fully async Telegram bot using **python‑telegram‑bot 22+**.
+It demonstrates loading `.env`, using shared core modules, defining simple commands, and running a fully async Telegram bot using **python‑telegram-bot 22+**.
 
 This bot is ideal as a foundation for creating new bots in the system.
 
@@ -149,11 +148,11 @@ sudo journalctl -u hello_bot -f
 
 ## 🔁 Future Enhancements
 
-- Inline menu
-- Callback buttons
-- Custom reply keyboards
-- API integrations
-- Error monitoring & notifications
+- Inline menu  
+- Callback buttons  
+- Custom reply keyboards  
+- API integrations  
+- Error monitoring & notifications  
 
 ---
 
