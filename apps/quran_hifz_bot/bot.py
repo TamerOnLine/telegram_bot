@@ -37,9 +37,9 @@ def main() -> None:
     app = (
         ApplicationBuilder()
         .token(BOT_TOKEN)
-        .application_name(BOT_NAME)
         .build()
     )
+
 
     # أوامر بسيطة
     app.add_handler(CommandHandler("start", start))
