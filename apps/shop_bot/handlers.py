@@ -10,8 +10,8 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from .config import CURRENCY, ADMIN_CHAT_ID
-from .products import PRODUCTS
+from config import CURRENCY, ADMIN_CHAT_ID
+from products import PRODUCTS
 
 
 def _build_products_keyboard() -> InlineKeyboardMarkup:
