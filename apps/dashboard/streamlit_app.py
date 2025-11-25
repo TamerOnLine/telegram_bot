@@ -192,7 +192,7 @@ def run_systemctl(
 
     try:
         result = subprocess.run(
-            ["systemctl", action, service],
+            ["sudo", "/usr/bin/systemctl", action, service],  # ✅ هنا التعديل
             check=False,
             capture_output=True,
             text=True,
@@ -203,6 +203,7 @@ def run_systemctl(
     out = (result.stdout or "") + (result.stderr or "")
     ok = result.returncode == 0
     return ok, out.strip() or "(لا يوجد مخرجات)"
+
 
 
 def tail_journal(service: str, lines: int = 50) -> Tuple[bool, str]:
