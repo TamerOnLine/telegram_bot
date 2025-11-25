@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# إضافة مسار جذر المشروع إلى sys.path
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -9,8 +17,10 @@ from telegram.ext import (
     filters,
 )
 
-from .config import BOT_TOKEN, BOT_NAME, logger
-from .handlers import (
+from apps.quran_hifz_bot.config import BOT_TOKEN, BOT_NAME, logger
+
+# استيراد كل شيء نحتاجه من handlers
+from apps.quran_hifz_bot.handlers import (
     start,
     help_cmd,
     my_goal,
@@ -34,12 +44,7 @@ from .handlers import (
 def main() -> None:
     logger.info("Starting Quran Hifz bot...")
 
-    app = (
-        ApplicationBuilder()
-        .token(BOT_TOKEN)
-        .build()
-    )
-
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # أوامر بسيطة
     app.add_handler(CommandHandler("start", start))
