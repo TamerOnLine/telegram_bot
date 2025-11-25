@@ -148,3 +148,18 @@ def load_chats_for_bot(bot_name: str) -> List[Dict[str, Any]]:
         rows = cur.fetchall()
 
     return [dict(r) for r in rows]
+
+def delete_chats_for_bot(bot_name: str) -> None:
+    """حذف كل سجلات المحادثات الخاصة ببوت معيّن."""
+    sql = "DELETE FROM bot_chats WHERE bot_name = %s;"
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(sql, (bot_name,))
+        conn.commit()
+
+
+def delete_chat(bot_name: str, chat_id: int) -> None:
+    """حذف محادثة واحدة (مثلاً لو حاب تنظّف شات تجارب)."""
+    sql = "DELETE FROM bot_chats WHERE bot_name = %s AND chat_id = %s;"
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(sql, (bot_name, chat_id))
+        conn.commit()

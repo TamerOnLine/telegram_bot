@@ -9,6 +9,9 @@ import requests
 import streamlit as st
 from dotenv import dotenv_values
 
+import pandas as pd
+from core.db import load_chats_for_bot, delete_chats_for_bot, delete_chat
+
 
 # =========================
 # مسارات المشروع
