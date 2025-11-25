@@ -43,6 +43,24 @@ def _build_main_menu() -> InlineKeyboardMarkup:
 
 
 # =========================
+#  دالة مساعدة لحفظ الشات في قاعدة البيانات
+# =========================
+
+def _track_chat(update: Update) -> None:
+    chat = update.effective_chat
+    if chat is None:
+        return
+
+    upsert_chat(
+        bot_name="quran_hifz_bot",
+        chat_id=chat.id,
+        chat_type=chat.type,
+        title=getattr(chat, "title", None),
+        username=getattr(chat, "username", None),
+    )
+
+
+# =========================
 #  رسائل مساعدة
 # =========================
 
@@ -67,10 +85,8 @@ def _format_goal_summary(goal: HifzGoal) -> str:
 # =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /start — رسالة ترحيب + قائمة رئيسية.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # /start — رسالة ترحيب + قائمة رئيسية.
+    _track_chat(update)
 
     user = update.effective_user
     logger.info("User %s started the bot.", user.id if user else "unknown")
@@ -93,10 +109,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /help — شرح طريقة الاستخدام.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # /help — شرح طريقة الاستخدام.
+    _track_chat(update)
 
     text = (
         "❓ *How to use the bot:*\n\n"
@@ -117,10 +131,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def my_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /my_goal — عرض الهدف الحالي للمستخدم.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # /my_goal — عرض الهدف الحالي للمستخدم.
+    _track_chat(update)
 
     user = update.effective_user
     if not user:
@@ -143,10 +155,8 @@ async def my_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /today — حساب الجزء المطلوب لهذا اليوم.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # /today — حساب الجزء المطلوب لهذا اليوم.
+    _track_chat(update)
 
     user = update.effective_user
     if not user:
@@ -189,10 +199,8 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # =========================
 
 async def set_goal_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    نقطة دخول /set_goal — نسأل عن اسم السورة.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # نقطة دخول /set_goal — نسأل عن اسم السورة.
+    _track_chat(update)
 
     context.user_data.clear()
     await update.effective_message.reply_text(
@@ -203,10 +211,8 @@ async def set_goal_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def set_goal_surah(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    حفظ اسم السورة والانتقال لرقم الآية الأولى.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # حفظ اسم السورة والانتقال لرقم الآية الأولى.
+    _track_chat(update)
 
     surah = (update.effective_message.text or "").strip()
     if not surah:
@@ -224,10 +230,8 @@ async def set_goal_surah(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def set_goal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    حفظ الآية الأولى والانتقال لرقم الآية الأخيرة.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # حفظ الآية الأولى والانتقال لرقم الآية الأخيرة.
+    _track_chat(update)
 
     text = (update.effective_message.text or "").strip()
     try:
@@ -249,10 +253,8 @@ async def set_goal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def set_goal_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    حفظ الآية الأخيرة والانتقال لعدد الأيام.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # حفظ الآية الأخيرة والانتقال لعدد الأيام.
+    _track_chat(update)
 
     text = (update.effective_message.text or "").strip()
     try:
@@ -288,10 +290,8 @@ async def set_goal_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 async def set_goal_days(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    حفظ عدد الأيام، حساب الملخص، وعرض رسالة تأكيد.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # حفظ عدد الأيام، حساب الملخص، وعرض رسالة تأكيد.
+    _track_chat(update)
 
     text = (update.effective_message.text or "").strip()
     try:
@@ -348,10 +348,8 @@ async def set_goal_days(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def set_goal_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    تأكيد أو إلغاء الهدف عبر أزرار inline.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # تأكيد أو إلغاء الهدف عبر أزرار inline.
+    _track_chat(update)
 
     query = update.callback_query
     await query.answer()
@@ -389,10 +387,8 @@ async def set_goal_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def set_goal_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    /cancel داخل المحادثة — إلغاء إعداد الهدف.
-    """
-    upsert_chat(update.effective_chat, update.effective_user)
+    # /cancel داخل المحادثة — إلغاء إعداد الهدف.
+    _track_chat(update)
 
     context.user_data.pop("pending_goal", None)
     await update.effective_message.reply_text(
@@ -412,6 +408,8 @@ async def menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     التعامل مع أزرار القائمة الرئيسية (CallbackQuery).
     الأنماط المتوقعة: set_goal / today / my_goal / help
     """
+    _track_chat(update)
+
     query = update.callback_query
     await query.answer()
 
