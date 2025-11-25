@@ -23,6 +23,7 @@ APPS_DIR = PROJECT_ROOT / "apps"
 # دوال مساعدة عامة
 # =========================
 
+
 def discover_bots() -> List[Dict[str, str]]:
     """
     يبحث عن كل البوتات داخل apps/* التي تحتوي على:
@@ -97,7 +98,10 @@ def call_telegram_send_message(
     try:
         data = resp.json()
     except json.JSONDecodeError:
-        return False, f"❌ استجابة غير مفهومة من Telegram (status={resp.status_code})."
+        return (
+            False,
+            f"❌ استجابة غير مفهومة من Telegram (status={resp.status_code}).",
+        )
 
     if not data.get("ok"):
         return False, f"❌ Telegram error: {data.get('description', 'Unknown error')}"
@@ -125,7 +129,10 @@ def fetch_chats_from_updates(
     try:
         data = resp.json()
     except json.JSONDecodeError:
-        return False, f"❌ استجابة غير مفهومة من Telegram (status={resp.status_code})."
+        return (
+            False,
+            f"❌ استجابة غير مفهومة من Telegram (status={resp.status_code}).",
+        )
 
     if not data.get("ok"):
         return False, f"❌ Telegram error: {data.get('description', 'Unknown error')}"
@@ -224,6 +231,94 @@ def tail_journal(service: str, lines: int = 50) -> Tuple[bool, str]:
 # واجهة Streamlit
 # =========================
 
+
+def _inject_custom_css() -> None:
+    """حقن تنسيق بسيط لواجهة احترافية (داكنة + كروت)."""
+    css = """
+    <style>
+    .stApp {
+        background: radial-gradient(circle at top left, #0f172a 0, #020617 45%, #020617 100%);
+        color: #e5e7eb;
+    }
+    .main-header {
+        padding: 1.1rem 1.4rem;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, #0ea5e9, #6366f1);
+        color: white;
+        margin-bottom: 1.3rem;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.55);
+    }
+    .main-header h1 {
+        font-size: 1.8rem;
+        margin-bottom: 0.15rem;
+    }
+    .main-header p {
+        margin: 0;
+        opacity: 0.94;
+        font-size: 0.95rem;
+    }
+    .bot-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.1rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(15,23,42,0.18);
+        border: 1px solid rgba(226,232,240,0.35);
+        font-size: 0.78rem;
+    }
+    .metric-card {
+        padding: 0.85rem 1rem;
+        border-radius: 0.9rem;
+        background: rgba(15,23,42,0.9);
+        border: 1px solid rgba(148,163,184,0.35);
+        margin-bottom: 0.25rem;
+    }
+    .metric-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: #9ca3af;
+    }
+    .metric-value {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-top: 0.2rem;
+        color: #e5e7eb;
+    }
+    .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(15,23,42,0.85);
+        border: 1px solid rgba(55,65,81,0.85);
+        font-size: 0.7rem;
+        color: #cbd5f5;
+        margin-right: 0.3rem;
+        margin-bottom: 0.3rem;
+    }
+    .small-muted {
+        font-size: 0.8rem;
+        color: #9ca3af;
+    }
+    .stTabs [role="tablist"] {
+        gap: .35rem;
+    }
+    .stTabs [role="tab"] {
+        padding-top: 0.3rem;
+        padding-bottom: 0.3rem;
+    }
+    footer, #MainMenu {
+        visibility: hidden;
+        height: 0;
+    }
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Telegram Bot Control Center",
@@ -231,19 +326,20 @@ def main() -> None:
         page_icon="🤖",
     )
 
+    _inject_custom_css()
+
+    # ----------------- الشريط الجانبي -----------------
     st.sidebar.title("⚙️ إدارة البوتات")
-    st.sidebar.caption("مشروع: telegram_bot")
+    st.sidebar.caption("مشروع: telegram_bot — Multi-Bot Suite")
 
     bots = discover_bots()
     if not bots:
-        st.error("لم يتم العثور على أي بوتات في مجلد `apps/` تحتوي على `bot.py` و `.env` مع TELEGRAM_BOT_TOKEN.")
+        st.error(
+            "لم يتم العثور على أي بوتات في مجلد `apps/` تحتوي على `bot.py` و `.env` مع TELEGRAM_BOT_TOKEN."
+        )
         st.stop()
 
-    # ----------------- اختيار البوت -----------------
-    bot_labels = [
-        f"{b['bot_name']} ({b['folder']})"
-        for b in bots
-    ]
+    bot_labels = [f"{b['bot_name']} ({b['folder']})" for b in bots]
     selected_idx = st.sidebar.selectbox(
         "اختر البوت داخل المشروع",
         options=list(range(len(bots))),
@@ -251,28 +347,117 @@ def main() -> None:
     )
     bot = bots[selected_idx]
 
-    # ----------------- رأس الصفحة -----------------
-    col_left, col_right = st.columns([2, 1])
-    with col_left:
-        st.title("🤖 Telegram Bot Manager")
-        st.subheader(f"البوت الحالي: {bot['bot_name']}")
+    with st.sidebar.expander("ℹ️ معلومات عن المشروع", expanded=False):
+        st.markdown(
+            "- يدعم عدد غير محدود من البوتات داخل مشروع واحد.\n"
+            "- كل بوت في مجلد مستقل تحت `apps/`.\n"
+            "- هذه اللوحة فقط للتحكم والإدارة."
+        )
+        st.markdown(
+            "[📦 فتح المشروع في GitHub](https://github.com/TamerOnLine/telegram_bot)",
+            unsafe_allow_html=True,
+        )
+
+    # ----------------- رأس الصفحة الاحترافي -----------------
+    col_header, col_quick = st.columns([2.4, 1.6])
+
+    with col_header:
+        st.markdown(
+            f"""
+            <div class="main-header">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+                    <div>
+                        <h1>🤖 Telegram Bot Control Center</h1>
+                        <p>
+                            مركز تحكّم موحّد لكل البوتات داخل مشروعك.<br/>
+                            <span class="small-muted">يمكنك إرسال رسائل، إدارة systemd، وقراءة Chat IDs من مكان واحد.</span>
+                        </p>
+                        <div style="margin-top:0.45rem;">
+                            <span class="bot-pill">
+                                <span style="font-size:0.8rem;">البوت الحالي:</span>
+                                <strong>{bot['bot_name']}</strong>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_quick:
+        token_masked = bot["token"][:8] + "..." + bot["token"][-4:]
+        service = bot["service_name"] or "غير معرف"
+
+        st.markdown(
+            """
+            <div class="metric-card">
+                <div class="metric-label">المجلد</div>
+                <div class="metric-value">apps/{folder}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">ملف البيئة (.env)</div>
+                <div class="metric-value">{env_path}</div>
+            </div>
+            """.format(
+                folder=bot["folder"],
+                env_path=bot["env_path"],
+            ),
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            """
+            <div class="metric-card" style="margin-top:0.35rem;">
+                <div class="metric-label">Token</div>
+                <div class="metric-value">{token}</div>
+                <div class="small-muted" style="margin-top:0.15rem;">
+                    يتم إخفاء التوكن في الواجهة، لا تُظهره لأحد.
+                </div>
+            </div>
+            """.format(
+                token=token_masked,
+            ),
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            """
+            <div class="metric-card" style="margin-top:0.35rem;">
+                <div class="metric-label">خدمة systemd</div>
+                <div class="metric-value">{service}</div>
+            </div>
+            """.format(
+                service=service,
+            ),
+            unsafe_allow_html=True,
+        )
+
+    # معلومات إضافية بسيطة تحت الهيدر
+    meta_col_left, meta_col_right = st.columns([2.0, 1.3])
+    with meta_col_left:
+        tags_html = '<span class="tag">📂 apps/{folder}</span>'.format(
+            folder=bot["folder"]
+        )
+        if bot["bot_username"]:
+            tags_html += (
+                '<span class="tag">✉️ @{username}</span>'.format(
+                    username=bot["bot_username"]
+                )
+            )
+        tags_html += '<span class="tag">🧪 جاهز للاختبار</span>'
+        st.markdown(tags_html, unsafe_allow_html=True)
+
         if bot["bot_description"]:
-            st.write(bot["bot_description"])
+            st.markdown(
+                f"<div class='small-muted' style='margin-top:0.2rem;'>{bot['bot_description']}</div>",
+                unsafe_allow_html=True,
+            )
+    with meta_col_right:
         if bot["bot_username"]:
             st.markdown(
-                f"📨 **Telegram:** [@{bot['bot_username']}](https://t.me/{bot['bot_username']})"
+                f"**رابط البوت:** [@{bot['bot_username']}](https://t.me/{bot['bot_username']})"
             )
-
-    with col_right:
-        st.markdown("#### معلومات سريعة")
-        st.markdown(f"- **Folder:** `apps/{bot['folder']}`")
-        st.markdown(f"- **.env:** `{bot['env_path']}`")
-        token_masked = bot["token"][:8] + "..." + bot["token"][-4:]
-        st.markdown(f"- **TOKEN:** `{token_masked}`")
-        if bot["service_name"]:
-            st.markdown(f"- **Service:** `{bot['service_name']}`")
-        else:
-            st.markdown("- **Service:** _(غير معرف)_")
 
     st.markdown("---")
 
@@ -287,29 +472,62 @@ def main() -> None:
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("مجلد البوت", bot["folder"])
+            st.markdown(
+                """
+                <div class="metric-card">
+                    <div class="metric-label">اسم المجلد</div>
+                    <div class="metric-value">{folder}</div>
+                </div>
+                """.format(
+                    folder=bot["folder"],
+                ),
+                unsafe_allow_html=True,
+            )
         with col2:
-            st.metric("ملف الإعدادات", ".env")
+            st.markdown(
+                """
+                <div class="metric-card">
+                    <div class="metric-label">ملف البيئة</div>
+                    <div class="metric-value">.env</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         with col3:
-            st.metric("Token متوفر", "نعم ✅" if bot["token"] else "لا ❌")
+            token_status = "نعم ✅" if bot["token"] else "لا ❌"
+            st.markdown(
+                """
+                <div class="metric-card">
+                    <div class="metric-label">Token متوفر</div>
+                    <div class="metric-value">{status}</div>
+                </div>
+                """.format(
+                    status=token_status,
+                ),
+                unsafe_allow_html=True,
+            )
 
         st.info(
-            "هذه الواجهة مركز تحكم موحد لكل البوتات:\n"
-            "- اختيار البوت من الشريط الجانبي\n"
-            "- إرسال رسائل تجريبية لأي Chat ID\n"
-            "- إدارة تشغيل الخدمة على السيرفر (إن عرّفت SERVICE_NAME)\n"
-            "- المساعدة في معرفة Chat ID"
+            "هذه الواجهة هي مركز تحكم موحّد لكل البوتات داخل مشروعك:\n"
+            "- 🔁 اختيار البوت من الشريط الجانبي.\n"
+            "- ✉️ إرسال رسائل تجريبية لأي Chat ID.\n"
+            "- 🖥 إدارة تشغيل الخدمة على السيرفر (لو تم تعريف SERVICE_NAME).\n"
+            "- 📌 المساعدة في معرفة Chat ID للمستخدمين / الجروبات / القنوات."
         )
 
     # ========== تبويب: إرسال رسالة ==========
     with tab_send:
         st.subheader("✉️ إرسال رسالة من هذا البوت")
 
+        st.caption("أرسل رسالة اختبار إلى Chat ID واحد أو إلى قائمة من الـ IDs.")
+
         with st.form("send_message_form"):
             mode = st.radio(
                 "نوع الإرسال:",
                 options=["single", "multi"],
-                format_func=lambda m: "إلى Chat واحد" if m == "single" else "إلى عدة Chats (كل سطر Chat ID)",
+                format_func=lambda m: "إلى Chat واحد"
+                if m == "single"
+                else "إلى عدة Chats (كل سطر Chat ID)",
                 horizontal=True,
             )
 
@@ -331,7 +549,11 @@ def main() -> None:
                 height=150,
             )
 
-            send_btn = st.form_submit_button("🚀 إرسال")
+            st.caption(
+                "تلميح: استخدم هذا القسم لاختبار البوت على عدة جروبات وقنوات في نفس الوقت."
+            )
+
+            send_btn = st.form_submit_button("🚀 إرسال الرسالة الآن")
 
         if send_btn:
             if not text.strip():
@@ -339,7 +561,6 @@ def main() -> None:
             elif not chat_id_input.strip():
                 st.error("الرجاء إدخال قيمة واحدة على الأقل لـ Chat ID.")
             else:
-                # تجهيز قائمة الـ IDs
                 if mode == "single":
                     chat_ids = [chat_id_input.strip()]
                 else:
@@ -350,7 +571,7 @@ def main() -> None:
                     ]
 
                 results = []
-                with st.spinner("جاري الإرسال..."):
+                with st.spinner("جاري الإرسال عبر Telegram API..."):
                     for cid in chat_ids:
                         ok, msg = call_telegram_send_message(
                             bot["token"],
@@ -404,9 +625,9 @@ def main() -> None:
                     ok, out = run_systemctl(service, "restart")
                     st.code(out, language="bash")
 
-            st.markdown("#### آخر اللوجات (journalctl)")
+            st.markdown("#### 📜 آخر اللوجات (journalctl)")
             lines = st.slider("عدد الأسطر:", 20, 200, 80, step=10)
-            if st.button("📜 تحديث اللوجات"):
+            if st.button("📥 تحديث اللوجات"):
                 ok, out = tail_journal(service, lines=lines)
                 if ok:
                     st.code(out, language="bash")
@@ -419,18 +640,18 @@ def main() -> None:
 
         st.markdown(
             """
-### الطريقة الموصى بها (أمر /id داخل البوت)
+### ✅ الطريقة الموصى بها (أمر /id داخل البوت)
 1. أضف في كود البوت أمر `/id` يرجع لك `chat.id` (مرة واحدة فقط في الكود).
 2. من أي محادثة (شخصية / جروب / قناة) اكتب `/id`.
 3. سيرد عليك البوت برسالة فيها رقم الـ Chat ID.
 
-> هذه الطريقة **لا تستخدم getUpdates** ولا تتعارض مع تشغيل البوت بـ run_polling أو webhook.
+> هذه الطريقة **لا تستخدم getUpdates** ولا تتعارض مع تشغيل البوت بـ `run_polling` أو `webhook`.
 """
         )
 
         st.divider()
 
-        st.markdown("### طريقة مساعدة إضافية (getUpdates من هنا)")
+        st.markdown("### 🧪 طريقة مساعدة إضافية (getUpdates من هنا)")
         st.warning(
             "هذه الطريقة تستخدم `getUpdates` وقد تعطي خطأ (Conflict) إذا كان البوت شغال بـ `run_polling` "
             "بنفس التوكن. استخدمها فقط إذا أوقفت البوت مؤقتًا أو في بيئة تطويرية."
