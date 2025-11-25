@@ -1,298 +1,227 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Tuple
+import logging
+import re
+from pathlib import Path
+from typing import Final
 
-from telegram import (
-    Update,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
+import requests
+from telegram import Update
 from telegram.ext import (
-    CallbackContext,
-    ConversationHandler,
-    MessageHandler,
-    CallbackQueryHandler,
+    ApplicationBuilder,
     CommandHandler,
+    ContextTypes,
+    MessageHandler,
     filters,
 )
 
-from .config import BOT_NAME
-from .models import HifzGoal, compute_today_portion
-from .storage import save_goal, load_goal
+from core.env import load_env, get_env
+from core.logging import setup_logging
+from core.db import upsert_chat   # ←⭐ إضافة مهمة
 
-# Conversation states
-SET_SURAH, SET_START, SET_END, SET_DAYS, CONFIRM = range(5)
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
 
+logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: CallbackContext) -> None:
-    """
-    Send a welcome message and display the main menu.
-    """
-    user = update.effective_user
-    keyboard = [
-        [
-            InlineKeyboardButton("Set Goal", callback_data="set_goal"),
-            InlineKeyboardButton("Today", callback_data="today"),
-        ],
-        [
-            InlineKeyboardButton("My Goal", callback_data="my_goal"),
-            InlineKeyboardButton("Help", callback_data="help"),
-        ],
-    ]
-    text = (
-        f"Hello *{user.first_name or 'User'}*!\n\n"
-        f"I'm *{BOT_NAME}*, your Quran Hifz assistant.\n\n"
-        "Choose an option or use commands:\n"
-        "• /set_goal – Set a new goal\n"
-        "• /my_goal – View your current goal\n"
-        "• /today – Today's portion\n"
-        "• /help – Help"
-    )
-    await update.effective_message.reply_markdown(
-        text, reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+ARABIC_RE = re.compile(r"[\u0600-\u06FF]")
+
+TOPIC_NAME: Final[str] = "Pi Network"
+TOPIC_DESCRIPTION: Final[str] = (
+    "Bot specialized in fetching summaries about Pi Network from Wikipedia."
+)
+BOT_LANG: Final[str] = "ar"
+WIKI_DEFAULT_LANG: Final[str] = "ar"
+FORCE_TOPIC_IN_QUERY: Final[bool] = True
 
 
-async def help_cmd(update: Update, context: CallbackContext) -> None:
-    """
-    Display help and usage instructions.
-    """
-    text = (
-        "*How to use the bot:*\n\n"
-        "1. Use /set_goal to define a new Hifz goal.\n"
-        "   You'll be guided step-by-step:\n"
-        "   • Surah name\n"
-        "   • Starting and ending ayah\n"
-        "   • Duration in days\n\n"
-        "2. Use /today to see your current portion.\n"
-        "3. Use /my_goal to see your current goal.\n\n"
-        "You can reset your goal anytime by using /set_goal."
-    )
-    await update.effective_message.reply_markdown(text)
+# ========= الرسائل =========
 
-
-async def set_goal_entry(update: Update, context: CallbackContext) -> int:
-    """
-    Initiate the goal setting process.
-    """
-    if update.callback_query:
-        await update.callback_query.answer()
-        msg = update.callback_query.message
-    else:
-        msg = update.effective_message
-
-    await msg.reply_text(
-        "Let's set a new Hifz goal.\n\n"
-        "First, send me the *Surah name* (e.g. Al-Baqarah):"
-    )
-    return SET_SURAH
-
-
-async def set_goal_surah(update: Update, context: CallbackContext) -> int:
-    surah = update.effective_message.text.strip()
-    context.user_data["goal_surah"] = surah
-    await update.effective_message.reply_text(
-        f"Surah: *{surah}*\n\nNow send the *first ayah number* (e.g. 1):",
-        parse_mode="Markdown",
-    )
-    return SET_START
-
-
-async def set_goal_start(update: Update, context: CallbackContext) -> int:
-    try:
-        start_ayah = int(update.effective_message.text.strip())
-        if start_ayah <= 0:
-            raise ValueError
-    except ValueError:
-        await update.effective_message.reply_text(
-            "Please send a *positive number* for the first ayah."
+def get_start_message() -> str:
+    if BOT_LANG == "ar":
+        return (
+            f"Welcome to the *{TOPIC_NAME}* search bot.\n\n"
+            "Send your question or use:\n"
+            "• `/search سؤالك هنا`\n\n"
+            "I'll try to fetch a summary from Wikipedia related to the topic."
         )
-        return SET_START
-
-    context.user_data["goal_start"] = start_ayah
-    await update.effective_message.reply_text(
-        "Great! Now send the *last ayah number* in this goal:",
-        parse_mode="Markdown",
-    )
-    return SET_END
-
-
-async def set_goal_end(update: Update, context: CallbackContext) -> int:
-    try:
-        end_ayah = int(update.effective_message.text.strip())
-        if end_ayah <= 0:
-            raise ValueError
-    except ValueError:
-        await update.effective_message.reply_text(
-            "Please send a *positive number* for the last ayah."
-        )
-        return SET_END
-
-    start_ayah = context.user_data.get("goal_start", 1)
-    if end_ayah < start_ayah:
-        await update.effective_message.reply_text(
-            "The last ayah must be *greater than or equal* to the first ayah."
-        )
-        return SET_END
-
-    context.user_data["goal_end"] = end_ayah
-    await update.effective_message.reply_text(
-        "Almost done!\n\nHow many *days* do you want to finish this part in?",
-        parse_mode="Markdown",
-    )
-    return SET_DAYS
-
-
-async def set_goal_days(update: Update, context: CallbackContext) -> int:
-    try:
-        days = int(update.effective_message.text.strip())
-        if days <= 0:
-            raise ValueError
-    except ValueError:
-        await update.effective_message.reply_text(
-            "Please send a *positive number* of days."
-        )
-        return SET_DAYS
-
-    context.user_data["goal_days"] = days
-
-    surah = context.user_data["goal_surah"]
-    start_ayah = context.user_data["goal_start"]
-    end_ayah = context.user_data["goal_end"]
-    total = end_ayah - start_ayah + 1
-    per_day = max(1, (total + days - 1) // days)
-
-    text = (
-        "Please confirm your goal:\n\n"
-        f"• Surah: *{surah}*\n"
-        f"• From ayah: *{start_ayah}*\n"
-        f"• To ayah: *{end_ayah}*\n"
-        f"• Total ayahs: *{total}*\n"
-        f"• Duration: *{days}* days\n"
-        f"• ≈ Ayahs per day: *{per_day}*\n"
-    )
-    keyboard = [
-        [
-            InlineKeyboardButton("Confirm", callback_data="confirm_goal"),
-            InlineKeyboardButton("Cancel", callback_data="cancel_goal"),
-        ]
-    ]
-    await update.effective_message.reply_markdown(
-        text, reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return CONFIRM
-
-
-async def set_goal_confirm(update: Update, context: CallbackContext) -> int:
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "cancel_goal":
-        await query.edit_message_text("Goal creation cancelled.")
-        context.user_data.clear()
-        return ConversationHandler.END
-
-    surah = context.user_data["goal_surah"]
-    start_ayah = context.user_data["goal_start"]
-    end_ayah = context.user_data["goal_end"]
-    days = context.user_data["goal_days"]
-    goal = HifzGoal(
-        surah=surah,
-        start_ayah=start_ayah,
-        end_ayah=end_ayah,
-        days=days,
-        start_date=date.today().isoformat(),
-    )
-    save_goal(update.effective_user.id, goal)
-    context.user_data.clear()
-
-    from_ayah, to_ayah, finished = compute_today_portion(goal)
-    today_text = (
-        f"New goal saved!\n\n"
-        f"Surah *{goal.surah}* from ayah *{goal.start_ayah}* to *{goal.end_ayah}* "
-        f"in *{goal.days}* days.\n\n"
-        f"Today's portion (Day 1):\n"
-        f"→ Ayahs *{from_ayah}* to *{to_ayah}*"
-    )
-    await query.edit_message_text(today_text, parse_mode="Markdown")
-    return ConversationHandler.END
-
-
-async def set_goal_cancel(update: Update, context: CallbackContext) -> int:
-    await update.effective_message.reply_text("Goal creation cancelled.")
-    context.user_data.clear()
-    return ConversationHandler.END
-
-
-def _format_goal(goal: HifzGoal) -> str:
     return (
-        f"Your current goal:\n\n"
-        f"• Surah: *{goal.surah}*\n"
-        f"• From ayah: *{goal.start_ayah}*\n"
-        f"• To ayah: *{goal.end_ayah}*\n"
-        f"• Total ayahs: *{goal.total_ayahs}*\n"
-        f"• Duration: *{goal.days}* days\n"
-        f"• Start date: *{goal.start_date}*"
+        f"Welcome to the *{TOPIC_NAME}* search bot.\n\n"
+        "Send your question or use:\n"
+        "• `/search your question here`\n\n"
+        "I will try to fetch a summary from Wikipedia related to this topic."
     )
 
 
-async def my_goal(update: Update, context: CallbackContext) -> None:
-    goal = load_goal(update.effective_user.id)
-    if not goal:
-        await update.effective_message.reply_text(
-            "You don't have a goal yet.\nUse /set_goal to create one."
+def get_help_message() -> str:
+    if BOT_LANG == "ar":
+        return (
+            "*How to use the bot:*\n\n"
+            f"- This bot is specialized in: *{TOPIC_NAME}*\n"
+            "- Send your question directly, or use:\n"
+            "  `/search سؤالك هنا`\n\n"
+            "I will search Wikipedia and return a summary + link to the full article."
         )
-        return
-
-    await update.effective_message.reply_markdown(_format_goal(goal))
-
-
-async def today(update: Update, context: CallbackContext) -> None:
-    goal = load_goal(update.effective_user.id)
-    if not goal:
-        await update.effective_message.reply_text(
-            "You don't have a goal yet.\nUse /set_goal first."
-        )
-        return
-
-    today_date = date.today()
-    from_ayah, to_ayah, finished = compute_today_portion(goal, today_date)
-
-    if finished:
-        await update.effective_message.reply_markdown(
-            "*MashaAllah!*\n\n"
-            "You have finished your current goal.\n"
-            "You can set a new one with /set_goal."
-        )
-        return
-
-    start = date.fromisoformat(goal.start_date)
-    day_index = (today_date - start).days + 1
-
-    text = (
-        f"Today's portion – Day {day_index}\n\n"
-        f"Surah *{goal.surah}*\n"
-        f"Ayahs *{from_ayah}* to *{to_ayah}*\n\n"
-        "May Allah make it easy for you."
+    return (
+        "*How to use the bot:*\n\n"
+        f"- This bot is specialized in: *{TOPIC_NAME}*\n"
+        "- Send your question directly, or use:\n"
+        "  `/search your question here`\n\n"
+        "I will search Wikipedia and return a summary + link to the full article."
     )
-    await update.effective_message.reply_markdown(text)
 
 
-async def menu_buttons(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()
+# ========= الوظائف المساعدة =========
 
-    if query.data == "set_goal":
-        fake_update = Update(
-            update.update_id,
-            message=query.message,
-        )
-        return await set_goal_entry(fake_update, context)
+def detect_lang(query: str) -> str:
+    if ARABIC_RE.search(query):
+        return "ar"
+    return "en"
 
-    if query.data == "today":
-        await today(update, context)
-    elif query.data == "my_goal":
-        await my_goal(update, context)
-    elif query.data == "help":
-        await help_cmd(update, context)
+
+def build_search_term(user_query: str) -> str:
+    user_query = user_query.strip()
+    if FORCE_TOPIC_IN_QUERY and TOPIC_NAME.lower() not in user_query.lower():
+        return f"{TOPIC_NAME} {user_query}"
+    return user_query
+
+
+def wiki_search(query: str, max_chars: int = 800) -> str:
+    if not query:
+        return "Please provide a search query."
+
+    lang = detect_lang(query) or WIKI_DEFAULT_LANG
+    search_term = build_search_term(query)
+
+    search_url = f"https://{lang}.wikipedia.org/w/api.php"
+    search_params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": search_term,
+        "format": "json",
+        "srlimit": 1,
+    }
+
+    try:
+        resp = requests.get(search_url, params=search_params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.exception("Wikipedia search failed: %s", exc)
+        return "Error while contacting Wikipedia. Please try again later."
+
+    results = data.get("query", {}).get("search", [])
+    if not results:
+        return "No clear result found on Wikipedia. Try a different wording."
+
+    page_title = results[0]["title"]
+    summary_url = (
+        f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/"
+        + page_title.replace(" ", "_")
+    )
+
+    try:
+        s_resp = requests.get(summary_url, timeout=10)
+        s_resp.raise_for_status()
+        s_data = s_resp.json()
+    except Exception as exc:
+        logger.exception("Wikipedia summary failed: %s", exc)
+        return "Error while fetching page summary from Wikipedia."
+
+    title = s_data.get("title", page_title)
+    extract = s_data.get("extract") or ""
+    page_url = (
+        s_data.get("content_urls", {}).get("desktop", {}).get("page")
+        or f"https://{lang}.wikipedia.org/wiki/{page_title.replace(' ', '_')}"
+    )
+
+    if not extract:
+        return "Not enough information found on Wikipedia."
+
+    if len(extract) > max_chars:
+        extract = extract[: max_chars - 3] + "..."
+
+    header = f"Search about {TOPIC_NAME}\n\n"
+    result_lines = [
+        header,
+        f"*{title}*",
+        "",
+        extract,
+        "",
+        f"Link: {page_url}",
+    ]
+
+    return "\n".join(result_lines)
+
+
+# ========= الهاندلرز =========
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    upsert_chat(update.effective_chat, update.effective_user)    # ←⭐ حفظ الشات
+    await update.effective_message.reply_markdown(get_start_message())
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    upsert_chat(update.effective_chat, update.effective_user)    # ←⭐ حفظ الشات
+    await update.effective_message.reply_markdown(get_help_message())
+
+
+async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    upsert_chat(update.effective_chat, update.effective_user)    # ←⭐ حفظ الشات
+
+    if context.args:
+        query = " ".join(context.args).strip()
+    else:
+        full_text = update.effective_message.text or ""
+        parts = full_text.split(maxsplit=1)
+        query = parts[1].strip() if len(parts) > 1 else ""
+
+    if not query:
+        await update.effective_message.reply_text("Please write something to search after /search.")
+        return
+
+    await update.effective_message.reply_text("Searching Wikipedia...", quote=True)
+
+    result = wiki_search(query)
+    await update.effective_message.reply_markdown(result)
+
+
+async def handle_plain_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    upsert_chat(update.effective_chat, update.effective_user)    # ←⭐ حفظ الشات
+
+    text = (update.effective_message.text or "").strip()
+    if len(text) < 3:
+        return
+
+    await update.effective_message.reply_markdown(
+        f"Searching Wikipedia for:\n`{text}`\n\nPlease wait..."
+    )
+
+    result = wiki_search(text)
+    await update.effective_message.reply_markdown(result)
+
+
+# ========= نقطة التشغيل =========
+
+def main() -> None:
+    setup_logging()
+    load_env(ENV_PATH)
+
+    token = get_env("TELEGRAM_BOT_TOKEN")
+    bot_name = get_env("BOT_NAME", f"{TOPIC_NAME}_search_bot")
+
+    logger.info("Starting topic search bot for: %s", TOPIC_NAME)
+
+    app = ApplicationBuilder().token(token).build()
+
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("search", cmd_search))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_plain_text))
+
+    logger.info("Bot %s is polling...", bot_name)
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
