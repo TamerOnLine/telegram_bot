@@ -2,23 +2,45 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
-from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
 
 import psycopg2
-import psycopg2.extras
-from telegram import Chat
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
 
-# Read the DSN from the `.env` file
+# =========================
+# إعداد مسارات وتحميل .env
+# =========================
+
+BASE_DIR = Path(__file__).resolve().parent      # core/
+PROJECT_ROOT = BASE_DIR.parent                  # جذر المشروع: telegram_bot
+ENV_PATH = PROJECT_ROOT / ".env"
+
+if ENV_PATH.exists():
+    load_dotenv(ENV_PATH)   # يحمّل PG_DSN وباقي القيم إن وجدت
+
+# =========================
+# إعداد سلسلة الاتصال PG_DSN
+# =========================
+
+# نقرأ من البيئة أولاً (هذا اللي اشتغل معك في الـ REPL)
 PG_DSN = os.getenv(
     "PG_DSN",
-    "postgresql://telegram_bot:telegram_bot@localhost:5432/telegram_bot",
+    # افتراضي لو ما وجد في البيئة (تقدر تعدل الباسورد لو مختلف)
+    "dbname=telegram_bots user=telegram_bot password=123456 host=127.0.0.1 port=5432",
 )
 
 
 @contextmanager
 def get_conn():
-    """Context manager to safely open and close a PostgreSQL connection."""
+    """
+    يرجع اتصال psycopg2 باستخدام PG_DSN.
+    يغلق الاتصال تلقائيًا بعد الانتهاء.
+    """
+    if not PG_DSN:
+        raise RuntimeError("PG_DSN is not set. تأكد من وجوده في .env")
+
     conn = psycopg2.connect(PG_DSN)
     try:
         yield conn
@@ -26,140 +48,120 @@ def get_conn():
         conn.close()
 
 
+# =========================
+# تهيئة الجداول (bot_chats)
+# =========================
+
 def init_db() -> None:
     """
-    Initialize the `bot_chats` table in the database if it does not exist.
-
-    This function ensures the table and index needed for chat tracking are created.
-    """
-    ddl = """
-    CREATE TABLE IF NOT EXISTS bot_chats (
-        id                  bigserial PRIMARY KEY,
-        bot_name            text        NOT NULL,
-        chat_id             bigint      NOT NULL,
-        chat_type           text        NOT NULL,
-        title               text,
-        username            text,
-        first_seen_at       timestamptz NOT NULL DEFAULT now(),
-        last_seen_at        timestamptz NOT NULL DEFAULT now(),
-        last_message_text   text,
-        last_message_date   timestamptz,
-        message_count       integer     NOT NULL DEFAULT 0,
-        is_blocked          boolean     NOT NULL DEFAULT false,
-        UNIQUE (bot_name, chat_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_bot_chats_bot_name_last_seen
-        ON bot_chats (bot_name, last_seen_at DESC);
+    إنشاء جدول bot_chats لو لم يكن موجودًا.
     """
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(ddl)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bot_chats (
+                id SERIAL PRIMARY KEY,
+                bot_name TEXT NOT NULL,
+                chat_id BIGINT NOT NULL,
+                chat_type TEXT,
+                title TEXT,
+                username TEXT,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (bot_name, chat_id)
+            );
+            """
+        )
         conn.commit()
 
 
+# نستدعي init_db عند استيراد الملف
+try:
+    init_db()
+except Exception as exc:  # لو في مشكلة في أول تشغيل، ما نخلي الاستيراد ينهار
+    # تقدر تطبع أو تسجل اللوج هنا لو حاب
+    pass
+
+
+# =========================
+# دوال خاصة بجدول bot_chats
+# =========================
+
 def upsert_chat(
     bot_name: str,
-    chat: Chat,
-    last_message_text: str | None = None,
-    last_message_date: datetime | None = None,
+    chat_id: int,
+    chat_type: str | None = None,
+    title: str | None = None,
+    username: str | None = None,
 ) -> None:
     """
-    Insert or update a single chat record in the database.
-
-    Args:
-        bot_name (str): The name of the bot.
-        chat (Chat): The Telegram chat object.
-        last_message_text (str | None): The text of the last message.
-        last_message_date (datetime | None): The timestamp of the last message.
+    إضافة/تحديث محادثة:
+    - لو موجودة: يزيد message_count + 1 ويحدّث last_seen_at وباقي الحقول.
+    - لو جديدة: يضيف سجل جديد.
     """
-    if last_message_date is None:
-        last_message_date = datetime.utcnow()
-
-    title = (
-        chat.title
-        or chat.username
-        or f"{(chat.first_name or '')} {(chat.last_name or '')}".strip()
-        or None
-    )
-
-    payload = {
-        "bot_name": bot_name,
-        "chat_id": chat.id,
-        "chat_type": chat.type,
-        "title": title,
-        "username": chat.username,
-        "last_message_text": last_message_text,
-        "last_message_date": last_message_date,
-    }
-
-    sql = """
-    INSERT INTO bot_chats (
-        bot_name, chat_id, chat_type, title, username,
-        last_message_text, last_message_date, message_count
-    )
-    VALUES (%(bot_name)s, %(chat_id)s, %(chat_type)s, %(title)s, %(username)s,
-            %(last_message_text)s, %(last_message_date)s, 1)
-    ON CONFLICT (bot_name, chat_id)
-    DO UPDATE SET
-        chat_type           = EXCLUDED.chat_type,
-        title               = COALESCE(EXCLUDED.title, bot_chats.title),
-        username            = COALESCE(EXCLUDED.username, bot_chats.username),
-        last_seen_at        = now(),
-        last_message_text   = EXCLUDED.last_message_text,
-        last_message_date   = EXCLUDED.last_message_date,
-        message_count       = bot_chats.message_count + 1;
-    """
-
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql, payload)
+        cur.execute(
+            """
+            INSERT INTO bot_chats (bot_name, chat_id, chat_type, title, username, message_count)
+            VALUES (%s, %s, %s, %s, %s, 1)
+            ON CONFLICT (bot_name, chat_id)
+            DO UPDATE SET
+                chat_type = EXCLUDED.chat_type,
+                title = EXCLUDED.title,
+                username = EXCLUDED.username,
+                message_count = bot_chats.message_count + 1,
+                last_seen_at = NOW();
+            """,
+            (bot_name, chat_id, chat_type, title, username),
+        )
         conn.commit()
 
 
 def load_chats_for_bot(bot_name: str) -> List[Dict[str, Any]]:
     """
-    Load all stored chats for a given bot.
-
-    Args:
-        bot_name (str): The name of the bot.
-
-    Returns:
-        List[Dict[str, Any]]: A list of chat records as dictionaries.
+    جلب كل المحادثات لهذا البوت من جدول bot_chats.
+    ستُستخدم في تبويب قاعدة البيانات في Streamlit.
     """
-    sql = """
-    SELECT
-        chat_id,
-        chat_type,
-        title,
-        username,
-        first_seen_at,
-        last_seen_at,
-        last_message_text,
-        last_message_date,
-        message_count,
-        is_blocked
-    FROM bot_chats
-    WHERE bot_name = %s
-    ORDER BY last_seen_at DESC;
-    """
-    with get_conn() as conn, conn.cursor(
-        cursor_factory=psycopg2.extras.DictCursor
-    ) as cur:
-        cur.execute(sql, (bot_name,))
+    with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+                bot_name,
+                chat_id,
+                chat_type,
+                title,
+                username,
+                message_count,
+                last_seen_at
+            FROM bot_chats
+            WHERE bot_name = %s
+            ORDER BY last_seen_at DESC;
+            """,
+            (bot_name,),
+        )
         rows = cur.fetchall()
-
-    return [dict(r) for r in rows]
-
-def delete_chats_for_bot(bot_name: str) -> None:
-    """حذف كل سجلات المحادثات الخاصة ببوت معيّن."""
-    sql = "DELETE FROM bot_chats WHERE bot_name = %s;"
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql, (bot_name,))
-        conn.commit()
+        return [dict(row) for row in rows]
 
 
 def delete_chat(bot_name: str, chat_id: int) -> None:
-    """حذف محادثة واحدة (مثلاً لو حاب تنظّف شات تجارب)."""
-    sql = "DELETE FROM bot_chats WHERE bot_name = %s AND chat_id = %s;"
+    """
+    حذف سجل محادثة واحدة حسب bot_name + chat_id.
+    """
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql, (bot_name, chat_id))
+        cur.execute(
+            "DELETE FROM bot_chats WHERE bot_name = %s AND chat_id = %s;",
+            (bot_name, chat_id),
+        )
+        conn.commit()
+
+
+def delete_chats_for_bot(bot_name: str) -> None:
+    """
+    حذف جميع سجلات المحادثات لبوت معيّن.
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM bot_chats WHERE bot_name = %s;",
+            (bot_name,),
+        )
         conn.commit()
