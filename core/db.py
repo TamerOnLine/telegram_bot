@@ -10,25 +10,28 @@ from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 # =========================
-# إعداد مسارات وتحميل .env
+# 🔧 تحميل الإعدادات و .env
 # =========================
 
-BASE_DIR = Path(__file__).resolve().parent      # core/
-PROJECT_ROOT = BASE_DIR.parent                  # جذر المشروع: telegram_bot
+# هذا الملف في: core/db.py
+# PROJECT_ROOT = telegram_bot/
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+
+# نحاول تحميل .env من جذر المشروع
 ENV_PATH = PROJECT_ROOT / ".env"
-
 if ENV_PATH.exists():
-    load_dotenv(ENV_PATH)   # يحمّل PG_DSN وباقي القيم إن وجدت
+    load_dotenv(ENV_PATH)
 
-# =========================
-# إعداد سلسلة الاتصال PG_DSN
-# =========================
-
-# نقرأ من البيئة أولاً (هذا اللي اشتغل معك في الـ REPL)
+# لا نضع أي كلمة سر افتراضية هنا ❌
 PG_DSN = os.getenv("PG_DSN")
 if not PG_DSN:
-    raise RuntimeError("❌ PG_DSN غير موجود — يرجى وضعه داخل ملف .env")
-# =========================
+    raise RuntimeError(
+        "❌ PG_DSN غير موجود في متغيرات البيئة.\n"
+        "ضع سطر مثل:\n"
+        "PG_DSN=dbname=telegram_bots user=telegram_bot password=YOUR_PASSWORD host=127.0.0.1 port=5432\n"
+        "داخل ملف .env في جذر المشروع."
+    )
 
 
 @contextmanager
@@ -37,9 +40,6 @@ def get_conn():
     يرجع اتصال psycopg2 باستخدام PG_DSN.
     يغلق الاتصال تلقائيًا بعد الانتهاء.
     """
-    if not PG_DSN:
-        raise RuntimeError("PG_DSN is not set. تأكد من وجوده في .env")
-
     conn = psycopg2.connect(PG_DSN)
     try:
         yield conn
@@ -48,12 +48,13 @@ def get_conn():
 
 
 # =========================
-# تهيئة الجداول (bot_chats)
+# 🗄️ تهيئة الجداول (bot_chats)
 # =========================
 
 def init_db() -> None:
     """
     إنشاء جدول bot_chats لو لم يكن موجودًا.
+    تُستدعى تلقائيًا عند استيراد الملف.
     """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -74,16 +75,12 @@ def init_db() -> None:
         conn.commit()
 
 
-# نستدعي init_db عند استيراد الملف
-try:
-    init_db()
-except Exception as exc:  # لو في مشكلة في أول تشغيل، ما نخلي الاستيراد ينهار
-    # تقدر تطبع أو تسجل اللوج هنا لو حاب
-    pass
+# نستدعي init_db مرة واحدة عند تحميل الموديول
+init_db()
 
 
 # =========================
-# دوال خاصة بجدول bot_chats
+# ⚙️ دوال التعامل مع bot_chats
 # =========================
 
 def upsert_chat(
@@ -119,7 +116,7 @@ def upsert_chat(
 def load_chats_for_bot(bot_name: str) -> List[Dict[str, Any]]:
     """
     جلب كل المحادثات لهذا البوت من جدول bot_chats.
-    ستُستخدم في تبويب قاعدة البيانات في Streamlit.
+    تُستخدم في تبويب قاعدة البيانات في Streamlit.
     """
     with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
