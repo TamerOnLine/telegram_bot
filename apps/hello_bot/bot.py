@@ -12,23 +12,47 @@ from telegram.ext import (
 
 from core.env import load_env, get_env
 from core.logging import setup_logging
+from core.db import upsert_chat
 
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
 
+def save_chat_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    حفظ معلومات المحادثة في جدول bot_chats لكل مرة يتفاعل فيها المستخدم مع البوت.
+    """
+    chat = update.effective_chat
+    if chat is None:
+        return
+
+    # اسم البوت كما يظهر في لوحة التحكم / قاعدة البيانات
+    bot_name = context.bot_data.get("BOT_NAME", "hello_bot")
+
+    # اختيار عنوان مناسب للمحادثة (جروب / قناة / مستخدم)
+    if chat.title:
+        title = chat.title
+    else:
+        full_name = f"{chat.first_name or ''} {chat.last_name or ''}".strip()
+        title = full_name or (chat.username or "") or "—"
+
+    upsert_chat(
+        bot_name=bot_name,
+        chat_id=chat.id,
+        chat_type=chat.type,
+        title=title,
+        username=chat.username,
+    )
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle the /start command.
-
-    Args:
-        update (Update): Incoming update from Telegram.
-        context (ContextTypes.DEFAULT_TYPE): Context provided by the handler.
-
-    Returns:
-        None
     """
+    # 🔹 أولاً نحفظ المحادثة في قاعدة البيانات
+    save_chat_from_update(update, context)
+
     user = update.effective_user
     name = user.first_name if user else "there"
 
@@ -38,32 +62,24 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "You can duplicate this folder to create new bots."
     )
 
-    await update.message.reply_text(text, parse_mode="Markdown")
+    if update.message:
+        await update.message.reply_text(text, parse_mode="Markdown")
 
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle the /ping command.
-
-    Args:
-        update (Update): Incoming update from Telegram.
-        context (ContextTypes.DEFAULT_TYPE): Context provided by the handler.
-
-    Returns:
-        None
     """
-    await update.message.reply_text("Pong!")
+    # 🔹 أيضاً نسجل المحادثة عند استخدام /ping
+    save_chat_from_update(update, context)
+
+    if update.message:
+        await update.message.reply_text("Pong!")
 
 
 def main() -> None:
     """
     Main entry point for the Telegram bot.
-
-    Sets up logging, loads environment variables, builds the application,
-    registers command handlers, and starts polling.
-
-    Returns:
-        None
     """
     setup_logging()
     load_env(ENV_PATH)
@@ -74,6 +90,9 @@ def main() -> None:
     logging.getLogger(__name__).info("Starting bot: %s", bot_name)
 
     app = ApplicationBuilder().token(token).build()
+
+    # نمرر اسم البوت إلى الـ handlers عبر bot_data
+    app.bot_data["BOT_NAME"] = bot_name
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("ping", cmd_ping))
