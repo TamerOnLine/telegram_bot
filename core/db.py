@@ -25,11 +25,10 @@ if ENV_PATH.exists():
 # =========================
 
 # نقرأ من البيئة أولاً (هذا اللي اشتغل معك في الـ REPL)
-PG_DSN = os.getenv(
-    "PG_DSN",
-    # افتراضي لو ما وجد في البيئة (تقدر تعدل الباسورد لو مختلف)
-    "dbname=telegram_bots user=telegram_bot password=123456 host=127.0.0.1 port=5432",
-)
+PG_DSN = os.getenv("PG_DSN")
+if not PG_DSN:
+    raise RuntimeError("❌ PG_DSN غير موجود — يرجى وضعه داخل ملف .env")
+# =========================
 
 
 @contextmanager
