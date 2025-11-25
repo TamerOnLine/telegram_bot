@@ -18,6 +18,8 @@ from .config import logger
 from .models import HifzGoal, compute_today_portion
 from .storage import save_goal, load_goal
 
+from core.db import upsert_chat
+
 
 # =========================
 #  حالات المحادثة
@@ -68,6 +70,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /start — رسالة ترحيب + قائمة رئيسية.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     user = update.effective_user
     logger.info("User %s started the bot.", user.id if user else "unknown")
 
@@ -92,6 +96,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /help — شرح طريقة الاستخدام.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     text = (
         "❓ *How to use the bot:*\n\n"
         "1️⃣ Use /set_goal to define a memorization plan:\n"
@@ -114,6 +120,8 @@ async def my_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /my_goal — عرض الهدف الحالي للمستخدم.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     user = update.effective_user
     if not user:
         return
@@ -138,6 +146,8 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /today — حساب الجزء المطلوب لهذا اليوم.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     user = update.effective_user
     if not user:
         return
@@ -182,6 +192,8 @@ async def set_goal_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """
     نقطة دخول /set_goal — نسأل عن اسم السورة.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     context.user_data.clear()
     await update.effective_message.reply_text(
         "🔹 Let's set a new memorization goal.\n\n"
@@ -194,6 +206,8 @@ async def set_goal_surah(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """
     حفظ اسم السورة والانتقال لرقم الآية الأولى.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     surah = (update.effective_message.text or "").strip()
     if not surah:
         await update.effective_message.reply_text(
@@ -213,6 +227,8 @@ async def set_goal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """
     حفظ الآية الأولى والانتقال لرقم الآية الأخيرة.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     text = (update.effective_message.text or "").strip()
     try:
         start_ayah = int(text)
@@ -236,6 +252,8 @@ async def set_goal_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     """
     حفظ الآية الأخيرة والانتقال لعدد الأيام.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     text = (update.effective_message.text or "").strip()
     try:
         end_ayah = int(text)
@@ -273,6 +291,8 @@ async def set_goal_days(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     """
     حفظ عدد الأيام، حساب الملخص، وعرض رسالة تأكيد.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     text = (update.effective_message.text or "").strip()
     try:
         days = int(text)
@@ -331,6 +351,8 @@ async def set_goal_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """
     تأكيد أو إلغاء الهدف عبر أزرار inline.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     query = update.callback_query
     await query.answer()
 
@@ -370,6 +392,8 @@ async def set_goal_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     /cancel داخل المحادثة — إلغاء إعداد الهدف.
     """
+    upsert_chat(update.effective_chat, update.effective_user)
+
     context.user_data.pop("pending_goal", None)
     await update.effective_message.reply_text(
         "❌ Goal creation cancelled.\n"
