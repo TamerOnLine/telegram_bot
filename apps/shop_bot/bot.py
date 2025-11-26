@@ -6,7 +6,6 @@ from pathlib import Path
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
     filters,
@@ -15,7 +14,7 @@ from telegram.ext import (
 from core.env import load_env, get_env
 from core.logging import setup_logging
 
-from config import BOT_NAME, ADMIN_CHAT_ID  # ADMIN_CHAT_ID غير مستخدم هنا لكن لا بأس
+from config import BOT_NAME
 from handlers import (
     cmd_start,
     cmd_products,
@@ -41,18 +40,14 @@ def main() -> None:
 
     logging.getLogger(__name__).info("Starting bot: %s", BOT_NAME)
 
-    app = (
-        ApplicationBuilder()
-        .token(token)
-        .build()
-    )
+    app = ApplicationBuilder().token(token).build()
 
     # === أوامر البوت ===
-    app.add_handler(CommandHandler("start",     cmd_start),     group=1)
-    app.add_handler(CommandHandler("products",  cmd_products),  group=1)
-    app.add_handler(CommandHandler("cart",      cmd_cart),      group=1)
-    app.add_handler(CommandHandler("clear",     cmd_clear),     group=1)
-    app.add_handler(CommandHandler("checkout",  cmd_checkout),  group=1)
+    app.add_handler(CommandHandler("start", cmd_start), group=1)
+    app.add_handler(CommandHandler("products", cmd_products), group=1)
+    app.add_handler(CommandHandler("cart", cmd_cart), group=1)
+    app.add_handler(CommandHandler("clear", cmd_clear), group=1)
+    app.add_handler(CommandHandler("checkout", cmd_checkout), group=1)
 
     # === أزرار inline ===
     app.add_handler(
@@ -68,7 +63,7 @@ def main() -> None:
         group=2,
     )
 
-    logging.getLogger(__name__).info("Bot is polling...")
+    logging.getLogger(__name__).info("Bot is polling.")
     app.run_polling()
 
 

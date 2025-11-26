@@ -24,15 +24,14 @@ def _add_item(cart: dict, pid: str, qty: int = 1) -> None:
 
 def _track_chat(update: Update) -> None:
     """
-    تسجيل الشات في جدول bot_chats (مشترك لكل البوتات).
-    نستخدم فقط قيم بسيطة، وليس كائن Chat نفسه.
+    تسجيل الشات في جدول bot_chats باستخدام قيم بسيطة فقط.
     """
     chat = update.effective_chat
     if chat is None:
         return
 
     upsert_chat(
-        bot_name="shop_bot",                 # 👈 اسم البوت
+        bot_name="shop_bot",
         chat_id=chat.id,
         chat_type=chat.type,
         title=getattr(chat, "title", None),
