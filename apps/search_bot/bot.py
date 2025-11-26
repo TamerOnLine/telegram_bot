@@ -17,6 +17,7 @@ from telegram.ext import (
 
 from core.env import load_env, get_env
 from core.logging import setup_logging
+from core.db import upsert_chat
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
@@ -32,6 +33,32 @@ TOPIC_DESCRIPTION: Final[str] = (
 BOT_LANG: Final[str] = "ar"
 WIKI_DEFAULT_LANG: Final[str] = "ar"
 FORCE_TOPIC_IN_QUERY: Final[bool] = True
+
+
+# =========================
+# helpers
+# =========================
+def _save_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Save chat info in bot_chats for every interaction."""
+    chat = update.effective_chat
+    if chat is None:
+        return
+
+    bot_name = context.bot_data.get("BOT_NAME", "search_bot")
+
+    if chat.title:
+        title = chat.title
+    else:
+        full_name = f"{chat.first_name or ''} {chat.last_name or ''}".strip()
+        title = full_name or (chat.username or "") or "—"
+
+    upsert_chat(
+        bot_name=bot_name,
+        chat_id=chat.id,
+        chat_type=chat.type,
+        title=title,
+        username=chat.username,
+    )
 
 
 def get_start_message() -> str:
@@ -101,7 +128,7 @@ def wiki_search(query: str, max_chars: int = 800) -> str:
         resp = requests.get(search_url, params=search_params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("Wikipedia search failed: %s", exc)
         return "Error while contacting Wikipedia. Please try again later."
 
@@ -119,7 +146,7 @@ def wiki_search(query: str, max_chars: int = 800) -> str:
         s_resp = requests.get(summary_url, timeout=10)
         s_resp.raise_for_status()
         s_data = s_resp.json()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("Wikipedia summary failed: %s", exc)
         return "Error while fetching page summary from Wikipedia."
 
@@ -149,15 +176,22 @@ def wiki_search(query: str, max_chars: int = 800) -> str:
     return "\n".join(result_lines)
 
 
+# =========================
+# handlers
+# =========================
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _save_chat(update, context)
     await update.effective_message.reply_markdown(get_start_message())
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _save_chat(update, context)
     await update.effective_message.reply_markdown(get_help_message())
 
 
 async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _save_chat(update, context)
+
     if context.args:
         query = " ".join(context.args).strip()
     else:
@@ -166,7 +200,9 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         query = parts[1].strip() if len(parts) > 1 else ""
 
     if not query:
-        await update.effective_message.reply_text("Please write something to search after /search.")
+        await update.effective_message.reply_text(
+            "Please write something to search after /search."
+        )
         return
 
     await update.effective_message.reply_text("Searching Wikipedia...", quote=True)
@@ -176,6 +212,8 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def handle_plain_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _save_chat(update, context)
+
     text = (update.effective_message.text or "").strip()
     if len(text) < 3:
         return
@@ -187,6 +225,9 @@ async def handle_plain_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.effective_message.reply_markdown(result)
 
 
+# =========================
+# entry point
+# =========================
 def main() -> None:
     setup_logging()
     load_env(ENV_PATH)
@@ -198,10 +239,15 @@ def main() -> None:
 
     app = ApplicationBuilder().token(token).build()
 
+    # expose bot_name to handlers
+    app.bot_data["BOT_NAME"] = bot_name
+
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("search", cmd_search))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_plain_text))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_plain_text)
+    )
 
     logger.info("Bot %s is polling...", bot_name)
     app.run_polling()
