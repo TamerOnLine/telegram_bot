@@ -1,4 +1,3 @@
-# apps/dashboard/tabs/tab_database.py
 from __future__ import annotations
 
 from typing import Dict
@@ -23,31 +22,30 @@ def render_tab(bot: Dict[str, str]) -> None:
 
     if not chats:
         st.info("لا توجد سجلات للمحادثات في قاعدة البيانات لهذا البوت بعد.")
-        return
+    else:
+        df = pd.DataFrame(chats)
 
-    df = pd.DataFrame(chats)
+        st.markdown("### 📊 إحصائيات سريعة")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("عدد المحادثات", len(df))
+        col2.metric("إجمالي الرسائل", int(df["message_count"].sum()))
+        col3.metric("آخر نشاط", str(df["last_seen_at"].max())[:19])
 
-    st.markdown("### 📊 إحصائيات سريعة")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("عدد المحادثات", len(df))
-    col2.metric("إجمالي الرسائل", int(df["message_count"].sum()))
-    col3.metric("آخر نشاط", str(df["last_seen_at"].max())[:19])
-
-    st.markdown("### 📜 السجلات")
-    search_q = st.text_input(
-        "🔍 بحث بالاسم / Chat ID / @username", key="db_search"
-    )
-    if search_q:
-        q = search_q.strip().lower()
-        mask = (
-            df["chat_id"].astype(str).str.contains(q)
-            | df["chat_type"].str.lower().str.contains(q)
-            | df["title"].fillna("").str.lower().str.contains(q)
-            | df["username"].fillna("").str.lower().str.contains(q)
+        st.markdown("### 📜 السجلات")
+        search_q = st.text_input(
+            "🔍 بحث بالاسم / Chat ID / @username", key="db_search"
         )
-        df = df[mask]
+        if search_q:
+            q = search_q.strip().lower()
+            mask = (
+                df["chat_id"].astype(str).str.contains(q)
+                | df["chat_type"].str.lower().str.contains(q)
+                | df["title"].fillna("").str.lower().str.contains(q)
+                | df["username"].fillna("").str.lower().str.contains(q)
+            )
+            df = df[mask]
 
-    st.dataframe(df, use_container_width=True)
+        st.dataframe(df, use_container_width=True)
 
     st.markdown("---")
     st.markdown("### 🧹 تنظيف السجلات")
@@ -70,3 +68,24 @@ def render_tab(bot: Dict[str, str]) -> None:
     if st.button("⚠️ حذف جميع سجلات هذا البوت من bot_chats"):
         delete_all_chats(bot_name)
         st.success("✅ تم حذف جميع السجلات لهذا البوت.")
+
+    # ======================================================================
+    #                    🔥 قسم طلبات المتجر shop_orders
+    # ======================================================================
+    if bot["folder"] == "shop_bot":
+        st.markdown("---")
+        st.subheader("📦 طلبات المتجر (shop_orders)")
+
+        try:
+            from apps.shop_bot.db import list_orders
+            orders = list_orders()
+        except Exception as exc:
+            st.error(f"خطأ أثناء تحميل shop_orders:\n{exc}")
+            return
+
+        if not orders:
+            st.info("لا يوجد طلبات حتى الآن.")
+            return
+
+        df_orders = pd.DataFrame(orders)
+        st.dataframe(df_orders, use_container_width=True)
