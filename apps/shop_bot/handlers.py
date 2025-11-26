@@ -7,7 +7,7 @@ from products import PRODUCTS
 from config import ADMIN_CHAT_ID
 from db import save_order
 
-from core.db import upsert_chat   # ←⭐ إضافة مهمة
+from core.db import upsert_chat
 
 
 # =============================================
@@ -18,8 +18,26 @@ def _get_cart(context: ContextTypes.DEFAULT_TYPE) -> dict:
     return context.user_data.setdefault("cart", {})
 
 
-def _add_item(cart: dict, pid: str, qty: int = 1):
+def _add_item(cart: dict, pid: str, qty: int = 1) -> None:
     cart[pid] = cart.get(pid, 0) + qty
+
+
+def _track_chat(update: Update) -> None:
+    """
+    تسجيل الشات في جدول bot_chats (مشترك لكل البوتات).
+    نستخدم فقط قيم بسيطة، وليس كائن Chat نفسه.
+    """
+    chat = update.effective_chat
+    if chat is None:
+        return
+
+    upsert_chat(
+        bot_name="shop_bot",                 # 👈 اسم البوت
+        chat_id=chat.id,
+        chat_type=chat.type,
+        title=getattr(chat, "title", None),
+        username=getattr(chat, "username", None),
+    )
 
 
 # =============================================
@@ -27,7 +45,8 @@ def _add_item(cart: dict, pid: str, qty: int = 1):
 # =============================================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
+
     await update.effective_message.reply_text(
         "Welcome to the Store Bot!\n\n"
         "Use /products to browse our items."
@@ -35,16 +54,18 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_products(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
 
-    keyboard = []
+    keyboard: list[list[InlineKeyboardButton]] = []
     for pid, item in PRODUCTS.items():
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{item['name']} – {item['price']}€",
-                callback_data=f"product_{pid}",
-            )
-        ])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{item['name']} – {item['price']}€",
+                    callback_data=f"product_{pid}",
+                )
+            ]
+        )
 
     await update.effective_message.reply_text(
         "Our products:",
@@ -53,12 +74,12 @@ async def cmd_products(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def product_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
 
     query = update.callback_query
     await query.answer()
 
-    pid = query.data.replace("product_", "")
+    pid = (query.data or "").replace("product_", "")
     product = PRODUCTS.get(pid)
     if not product:
         await query.edit_message_text("Product not found.")
@@ -76,12 +97,12 @@ async def product_details(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
 
     query = update.callback_query
     await query.answer()
 
-    pid = query.data.replace("add_", "")
+    pid = (query.data or "").replace("add_", "")
     cart = _get_cart(context)
     _add_item(cart, pid)
 
@@ -89,20 +110,20 @@ async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def back_to_products(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
     await cmd_products(update, context)
 
 
 async def cmd_cart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
 
     cart = _get_cart(context)
     if not cart:
         await update.effective_message.reply_text("Your cart is empty.")
         return
 
-    lines = ["Your cart:\n"]
-    total = 0
+    lines: list[str] = ["Your cart:\n"]
+    total = 0.0
 
     for pid, qty in cart.items():
         product = PRODUCTS.get(pid)
@@ -120,13 +141,14 @@ async def cmd_cart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
+
     context.user_data["cart"] = {}
     await update.effective_message.reply_text("Cart cleared.")
 
 
 async def cmd_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    upsert_chat(update.effective_chat, update.effective_user)  # ⭐
+    _track_chat(update)
 
     cart = _get_cart(context)
     if not cart:
@@ -134,8 +156,12 @@ async def cmd_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     user = update.effective_user
-    lines = ["New Order:\n"]
-    total = 0
+    if user is None:
+        await update.effective_message.reply_text("User not found.")
+        return
+
+    lines: list[str] = ["New Order:\n"]
+    total = 0.0
 
     for pid, qty in cart.items():
         product = PRODUCTS.get(pid)
@@ -150,8 +176,8 @@ async def cmd_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     save_order(
         user_id=user.id,
-        username=user.username,
-        full_name=user.full_name,
+        username=user.username or "",
+        full_name=user.full_name or "",
         details=order_text,
         total=total,
     )
