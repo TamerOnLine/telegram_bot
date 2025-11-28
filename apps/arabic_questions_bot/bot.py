@@ -19,17 +19,43 @@ from telegram.ext import (
 )
 
 # ==========================
-# إعداد المسارات و الإعدادات العامة
+# إعداد المسارات و تحميل .env يدويًا
 # ==========================
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# ملف قاعدة البيانات: من متغيّر البيئة أو الافتراضي بجانب السكربت
+
+def load_env_file(env_path: Path) -> None:
+    """
+    تحميل متغيّرات البيئة من ملف .env بسيط (نفس أسلوب باقي البوتات)
+    """
+    if not env_path.exists():
+        return
+
+    with env_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+
+            # لا نغيّر قيمة موجودة مسبقًا من systemd مثلاً
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+# تحميل .env الموجود في مجلد البوت
+load_env_file(BASE_DIR / ".env")
+
+# الآن نقرأ المسارات والتوكن من البيئة (systemd أو .env)
 DB_PATH = Path(os.getenv("QUESTIONS_DB_PATH", BASE_DIR / "questions.db"))
 
-# توكن البوت من متغيّر البيئة
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-
 if not BOT_TOKEN:
     raise RuntimeError("الرجاء ضبط متغيّر البيئة TELEGRAM_BOT_TOKEN قبل تشغيل البوت.")
 
