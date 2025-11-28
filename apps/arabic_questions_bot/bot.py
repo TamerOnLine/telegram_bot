@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
+import logging
 import sqlite3
 from contextlib import contextmanager
-from typing import List, Dict, Any
 from pathlib import Path
+from typing import Any, Dict, List
 
 from telegram import (
     Update,
@@ -18,54 +18,28 @@ from telegram.ext import (
     ContextTypes,
 )
 
+from core.env import load_env, get_env
+from core.logging import setup_logging
+from core.db import upsert_chat
+
 # ==========================
-# إعداد المسارات و تحميل .env يدويًا
+# إعداد المسارات العامة
 # ==========================
 
 BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
 
+# سيتم ضبطها في main() من متغيّرات البيئة
+DB_PATH: Path = BASE_DIR / "questions.db"
 
-def load_env_file(env_path: Path) -> None:
-    """
-    تحميل متغيّرات البيئة من ملف .env بسيط (نفس أسلوب باقي البوتات)
-    """
-    if not env_path.exists():
-        return
-
-    with env_path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip()
-
-            # لا نغيّر قيمة موجودة مسبقًا من systemd مثلاً
-            if key and key not in os.environ:
-                os.environ[key] = value
-
-
-# تحميل .env الموجود في مجلد البوت
-load_env_file(BASE_DIR / ".env")
-
-# الآن نقرأ المسارات والتوكن من البيئة (systemd أو .env)
-DB_PATH = Path(os.getenv("QUESTIONS_DB_PATH", BASE_DIR / "questions.db"))
-
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-if not BOT_TOKEN:
-    raise RuntimeError("الرجاء ضبط متغيّر البيئة TELEGRAM_BOT_TOKEN قبل تشغيل البوت.")
 
 # ==========================
-# دوال مساعدة للتعامل مع قاعدة البيانات
+# دوال مساعدة لقاعدة البيانات (SQLite)
 # ==========================
 
 @contextmanager
 def get_conn():
-    # مهم: نحول DB_PATH إلى str لأن sqlite3 لا يفهم Path مباشرة في بعض النسخ
+    """اتصال SQLite إلى ملف الأسئلة."""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
@@ -104,7 +78,7 @@ def get_lessons_by_unit(unit_id: str) -> List[Dict[str, Any]]:
         )
         rows = cur.fetchall()
 
-    lessons = []
+    lessons: List[Dict[str, Any]] = []
     for row in rows:
         lessons.append(
             {
@@ -133,7 +107,7 @@ def get_questions_by_lesson(lesson_id: str) -> List[Dict[str, Any]]:
         )
         rows = cur.fetchall()
 
-    questions = []
+    questions: List[Dict[str, Any]] = []
     for row in rows:
         questions.append(
             {
@@ -147,6 +121,36 @@ def get_questions_by_lesson(lesson_id: str) -> List[Dict[str, Any]]:
 
 
 # ==========================
+# تتبّع المحادثات في bot_chats (PostgreSQL)
+# ==========================
+
+def save_chat_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    حفظ معلومات المحادثة في جدول bot_chats لكل تفاعل.
+    يظهر بعدها في لوحة التحكم (تبويب قاعدة البيانات).
+    """
+    chat = update.effective_chat
+    if chat is None:
+        return
+
+    bot_name = context.bot_data.get("BOT_NAME", "arabic_questions_bot")
+
+    if chat.title:
+        title = chat.title
+    else:
+        full_name = f"{chat.first_name or ''} {chat.last_name or ''}".strip()
+        title = full_name or (chat.username or "") or "—"
+
+    upsert_chat(
+        bot_name=bot_name,
+        chat_id=chat.id,
+        chat_type=chat.type,
+        title=title,
+        username=chat.username,
+    )
+
+
+# ==========================
 # منطق البوت
 # ==========================
 
@@ -154,12 +158,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /start – عرض الوحدات.
     """
+    # نسجّل المحادثة في PostgreSQL
+    save_chat_from_update(update, context)
+
     units = get_units()
     if not units:
         await update.message.reply_text("لا توجد وحدات في قاعدة البيانات.")
         return
 
-    keyboard = []
+    keyboard: List[List[InlineKeyboardButton]] = []
     for unit_id in units:
         keyboard.append(
             [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
@@ -179,6 +186,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """
     استقبال جميع ضغطات الأزرار (InlineKeyboard).
     """
+    # أيضاً نسجّل أي تفاعل بالأزرار
+    save_chat_from_update(update, context)
+
     query = update.callback_query
     await query.answer()
 
@@ -210,7 +220,7 @@ async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) 
     # حفظ الوحدة الحالية في user_data (للمعلومة فقط)
     context.user_data["unit_id"] = unit_id
 
-    keyboard = []
+    keyboard: List[List[InlineKeyboardButton]] = []
     for lesson in lessons:
         title = lesson["title"]
         lesson_id = lesson["lesson_id"]
@@ -226,7 +236,9 @@ async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) 
     )
 
 
-async def start_lesson_questions(query, context: ContextTypes.DEFAULT_TYPE, lesson_id: str) -> None:
+async def start_lesson_questions(
+    query, context: ContextTypes.DEFAULT_TYPE, lesson_id: str
+) -> None:
     """
     تحميل أسئلة الدرس وبدء عرضها من السؤال الأول.
     """
@@ -266,9 +278,9 @@ def build_nav_keyboard(has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
     """
     إنشاء أزرار التنقل بين الأسئلة.
     """
-    buttons = []
+    buttons: List[List[InlineKeyboardButton]] = []
+    row: List[InlineKeyboardButton] = []
 
-    row = []
     if has_prev:
         row.append(InlineKeyboardButton("⬅️ السابق", callback_data="nav:prev"))
     if has_next:
@@ -277,10 +289,12 @@ def build_nav_keyboard(has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
     if row:
         buttons.append(row)
 
-    return InlineKeyboardMarkup(buttons) if buttons else InlineKeyboardMarkup([])
+    return InlineKeyboardMarkup(buttons)
 
 
-async def show_current_question(query, context: ContextTypes.DEFAULT_TYPE, edit: bool = False) -> None:
+async def show_current_question(
+    query, context: ContextTypes.DEFAULT_TYPE, edit: bool = False
+) -> None:
     """
     عرض السؤال الحالي (الذي يشير إليه q_index) مع الجواب في نفس الرسالة.
     """
@@ -334,7 +348,9 @@ async def show_current_question(query, context: ContextTypes.DEFAULT_TYPE, edit:
         await query.message.reply_text(text=text, reply_markup=reply_markup)
 
 
-async def navigate_question(query, context: ContextTypes.DEFAULT_TYPE, direction: str) -> None:
+async def navigate_question(
+    query, context: ContextTypes.DEFAULT_TYPE, direction: str
+) -> None:
     """
     الانتقال إلى السؤال السابق أو التالي.
     """
@@ -364,12 +380,32 @@ async def navigate_question(query, context: ContextTypes.DEFAULT_TYPE, direction
 # ==========================
 
 def main() -> None:
-    app = Application.builder().token(BOT_TOKEN).build()
+    global DB_PATH
+
+    # لوجينغ موحّد
+    setup_logging()
+
+    # تحميل .env الخاص بهذا البوت
+    load_env(ENV_PATH)
+
+    # قراءة الإعدادات من .env
+    token = get_env("TELEGRAM_BOT_TOKEN")
+    bot_name = get_env("BOT_NAME", "arabic_questions_bot")
+    db_path_str = get_env("QUESTIONS_DB_PATH", str(BASE_DIR / "questions.db"))
+    DB_PATH = Path(db_path_str)
+
+    logging.getLogger(__name__).info("Starting bot: %s", bot_name)
+    logging.getLogger(__name__).info("Using questions DB: %s", DB_PATH)
+
+    app = Application.builder().token(token).build()
+
+    # نمرّر اسم البوت لجميع الهاندلرز
+    app.bot_data["BOT_NAME"] = bot_name
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    print("Arabic Questions Bot is running...")
+    logging.getLogger(__name__).info("Bot is polling.")
     app.run_polling()
 
 
