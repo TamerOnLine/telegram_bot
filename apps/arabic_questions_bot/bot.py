@@ -356,37 +356,71 @@ def build_nav_keyboard(has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
 async def show_current_question(
     query_or_update, context: ContextTypes.DEFAULT_TYPE, edit: bool = False
 ) -> None:
-    """
-    عرض السؤال الحالي (Learning Mode) سواء من درس أو من نتائج البحث.
-    """
+
     questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
     idx: int = context.user_data.get("q_index", 0)
     view_mode: str = context.user_data.get("view_mode", "lesson")
     search_query: str = context.user_data.get("search_query", "")
 
     if not questions:
+        msg = "لا توجد أسئلة."
         if edit:
-            await query_or_update.edit_message_text("لا توجد أسئلة.")
+            await query_or_update.edit_message_text(msg)
         else:
-            await query_or_update.message.reply_text("لا توجد أسئلة.")
+            await query_or_update.message.reply_text(msg)
         return
 
-    if idx < 0:
-        idx = 0
-    if idx > len(questions) - 1:
-        idx = len(questions) - 1
-
+    # تأمين الفهرس
+    idx = max(0, min(idx, len(questions) - 1))
     context.user_data["q_index"] = idx
 
     q = questions[idx]
+
+    unit_id = q.get("unit_id", "?")
+    lesson_title = q.get("lesson_title", "")
     q_type = q["type"]
     q_text = q["question"]
     q_answer = q["answer"]
 
-    unit_id = q.get("unit_id") or context.user_data.get("unit_id", "?")
-    lesson_title = q.get("lesson_title") or context.user_data.get(
-        "lesson_title", ""
+    # رأس البحث أو الدرس
+    if view_mode == "search":
+        header = (
+            f"🔍 *نتائج البحث:* «{search_query}»\n"
+            f"📘 *الوحدة:* {unit_id} — *الدرس:* {lesson_title}\n"
+            f"🟨 *السؤال* {idx + 1} *من* {len(questions)}\n\n"
+        )
+    else:
+        header = (
+            f"🎓 *التدريب*\n"
+            f"📘 *الوحدة:* {unit_id} / *الدرس:* {lesson_title}\n"
+            f"🟨 *السؤال* {idx + 1} *من* {len(questions)}\n\n"
+        )
+
+    # محتوى السؤال والجواب داخل صندوق (Code Block)
+    block = (
+        "```\n"
+        f"❓ السؤال:\n{q_text}\n\n"
+        f"📌 نوع السؤال: {q_type}\n\n"
+        f"📝 الإجابة النموذجية:\n{q_answer}\n"
+        "```\n"
     )
+
+    text = header + block
+
+    # أزرار الملاحة
+    has_prev = idx > 0
+    has_next = idx < len(questions) - 1
+    reply_markup = build_nav_keyboard(has_prev, has_next)
+
+    if edit:
+        await query_or_update.edit_message_text(
+            text=text, reply_markup=reply_markup, parse_mode="Markdown"
+        )
+    else:
+        await query_or_update.message.reply_text(
+            text=text, reply_markup=reply_markup, parse_mode="Markdown"
+        )
+
 
     # ===== تنسيق Learning Mode =====
     if view_mode == "search":
