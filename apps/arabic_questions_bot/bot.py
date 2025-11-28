@@ -4,6 +4,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from typing import List, Dict, Any
+from pathlib import Path
 
 from telegram import (
     Update,
@@ -17,23 +18,20 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from pathlib import Path
-
 # ==========================
 # إعداد المسارات و الإعدادات العامة
 # ==========================
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# لو فيه متغيّر بيئة QUESTIONS_DB_PATH نستخدمه
-# وإلا نستخدم ملف questions.db الموجود داخل مجلد البوت
+# ملف قاعدة البيانات: من متغيّر البيئة أو الافتراضي بجانب السكربت
 DB_PATH = Path(os.getenv("QUESTIONS_DB_PATH", BASE_DIR / "questions.db"))
 
-BOT_TOKEN = os.getenv("ARABIC_Q_BOT_TOKEN", "").strip()
+# توكن البوت من متغيّر البيئة
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
 if not BOT_TOKEN:
-    raise RuntimeError("الرجاء ضبط متغيّر البيئة ARABIC_Q_BOT_TOKEN قبل تشغيل البوت.")
-
+    raise RuntimeError("الرجاء ضبط متغيّر البيئة TELEGRAM_BOT_TOKEN قبل تشغيل البوت.")
 
 # ==========================
 # دوال مساعدة للتعامل مع قاعدة البيانات
