@@ -10,7 +10,10 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
 )
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -182,7 +185,6 @@ def save_chat_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ==========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/start – القائمة الرئيسية (الوحدات + البحث المتقدم)."""
     save_chat_from_update(update, context)
 
     units = get_units()
@@ -190,11 +192,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("لا توجد وحدات في قاعدة البيانات.")
         return
 
-    keyboard: List[List[InlineKeyboardButton]] = [
+    # 1) لوحة الوحدات (inline) مثل ما هي
+    inline_kb = [
         [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
         for unit_id in units
     ]
-    keyboard.append(
+    inline_kb.append(
         [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
     )
 
@@ -206,8 +209,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🎓 نظام أسئلة اللغة العربية\n"
         "━━━━━━━━━━━━\n"
         "اختر وحدة دراسية من الأزرار، أو استخدم (🔍 بحث متقدم) للبحث في الأسئلة.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=InlineKeyboardMarkup(inline_kb),
     )
+
+    # 2) لوحة أزرار دائمة بجانب الكاميرا (Reply Keyboard)
+    reply_kb = ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🏠 الرئيسية"), KeyboardButton("🔍 بحث متقدم")],
+            [KeyboardButton("⬅️ السابق"), KeyboardButton("➡️ التالي")],
+        ],
+        resize_keyboard=True,   # تخلي اللوحة بحجم مناسب
+        one_time_keyboard=False # تظل ظاهرة دائماً
+    )
+
+    await update.message.reply_text(
+        "لوحة التحكم السريعة 👇",
+        reply_markup=reply_kb,
+    )
+
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -491,12 +510,53 @@ async def show_search_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """استقبال نص المستخدم في وضع البحث المتقدم."""
+    text = (update.message.text or "").strip()
     view_mode = context.user_data.get("view_mode")
+
+    # أولاً: اختصارات لوحة الأزرار
+    if text == "🏠 الرئيسية":
+        # نعيد المستخدم للقائمة الرئيسية
+        # هنا لا يوجد callback_query، فنعمل نسخة مبسطة من go_home
+        context.user_data.clear()
+        context.user_data["view_mode"] = "home"
+        units = get_units()
+        inline_kb = [
+            [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
+            for unit_id in units
+        ]
+        inline_kb.append(
+            [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
+        )
+        await update.message.reply_text(
+            "عدنا إلى القائمة الرئيسية 🎓\nاختر وحدة:",
+            reply_markup=InlineKeyboardMarkup(inline_kb),
+        )
+        return
+
+    if text == "🔍 بحث متقدم":
+        # نستدعي منطق شاشة البحث
+        context.user_data["view_mode"] = "search_intro"
+        context.user_data["search_query"] = ""
+        await update.message.reply_text(
+            "🔍 أرسل الآن كلمة أو جملة نبحث عنها في نص السؤال والإجابة."
+        )
+        return
+
+    if text == "➡️ التالي":
+        context.user_data["q_index"] = context.user_data.get("q_index", 0) + 1
+        await show_current_question(update, context, edit=False)
+        return
+
+    if text == "⬅️ السابق":
+        context.user_data["q_index"] = context.user_data.get("q_index", 0) - 1
+        await show_current_question(update, context, edit=False)
+        return
+
+    # ثانياً: منطق البحث المتقدم الحالي
     if view_mode != "search_intro":
         return
 
-    query_text = (update.message.text or "").strip()
+    query_text = text
     if not query_text:
         await update.message.reply_text("الرجاء إرسال كلمة أو جملة لنبحث عنها في الأسئلة.")
         return
