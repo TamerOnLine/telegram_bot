@@ -31,8 +31,7 @@ from core.db import upsert_chat
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
-# سيتم ضبطها في main() من متغيّرات البيئة
-DB_PATH: Path = BASE_DIR / "questions.db"
+DB_PATH: Path = BASE_DIR / "questions.db"  # سيتم ضبطه في main()
 
 
 # ==========================
@@ -51,9 +50,7 @@ def get_conn():
 
 
 def get_units() -> List[str]:
-    """
-    إرجاع قائمة معرفات الوحدات الموجودة في جدول lessons.
-    """
+    """إرجاع قائمة الوحدات من lessons."""
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT unit_id FROM lessons ORDER BY unit_id")
@@ -62,9 +59,7 @@ def get_units() -> List[str]:
 
 
 def get_lessons_by_unit(unit_id: str) -> List[Dict[str, Any]]:
-    """
-    إرجاع دروس وحدة معيّنة.
-    """
+    """إرجاع دروس وحدة معيّنة."""
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -91,9 +86,7 @@ def get_lessons_by_unit(unit_id: str) -> List[Dict[str, Any]]:
 
 
 def get_questions_by_lesson(lesson_id: str) -> List[Dict[str, Any]]:
-    """
-    إرجاع كل الأسئلة المرتبطة بدرس معيّن.
-    """
+    """إرجاع كل الأسئلة المرتبطة بدرس معيّن."""
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -125,10 +118,7 @@ def get_questions_by_lesson(lesson_id: str) -> List[Dict[str, Any]]:
 
 
 def search_questions(keyword: str) -> List[Dict[str, Any]]:
-    """
-    بحث متقدم في نص السؤال والإجابة عن كلمة/جملة.
-    يرجع قائمة أسئلة مع معلومات الوحدة والدرس.
-    """
+    """بحث متقدم في نص السؤال والإجابة."""
     pattern = f"%{keyword}%"
     with get_conn() as conn:
         cur = conn.cursor()
@@ -161,14 +151,11 @@ def search_questions(keyword: str) -> List[Dict[str, Any]]:
 
 
 # ==========================
-# تتبّع المحادثات في bot_chats (PostgreSQL)
+# حفظ المحادثات في bot_chats (PostgreSQL)
 # ==========================
 
 def save_chat_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    حفظ معلومات المحادثة في جدول bot_chats لكل تفاعل.
-    يظهر بعدها في لوحة التحكم (تبويب قاعدة البيانات).
-    """
+    """حفظ معلومات المحادثة في جدول bot_chats لكل تفاعل."""
     chat = update.effective_chat
     if chat is None:
         return
@@ -195,9 +182,7 @@ def save_chat_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ==========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /start – عرض الوحدات + زر البحث المتقدم.
-    """
+    """/start – القائمة الرئيسية (الوحدات + البحث المتقدم)."""
     save_chat_from_update(update, context)
 
     units = get_units()
@@ -209,34 +194,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
         for unit_id in units
     ]
-    # زر البحث المتقدم
     keyboard.append(
         [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
     )
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "🎓 *نظام أسئلة اللغة العربية*\n"
-        "━━━━━━━━━━━━\n"
-        "اختر وحدة دراسية من القائمة، أو استخدم (🔍 بحث متقدم) للعثور على أسئلة حسب كلمة معيّنة.",
-        reply_markup=reply_markup,
-    )
-
-    # حالة افتراضية
     context.user_data.clear()
     context.user_data["view_mode"] = "home"
+    context.user_data["answer_visible"] = True
+
+    await update.message.reply_text(
+        "🎓 نظام أسئلة اللغة العربية\n"
+        "━━━━━━━━━━━━\n"
+        "اختر وحدة دراسية من الأزرار، أو استخدم (🔍 بحث متقدم) للبحث في الأسئلة.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    استقبال جميع ضغطات الأزرار (InlineKeyboard).
-    """
+    """استقبال جميع ضغطات الأزرار."""
     save_chat_from_update(update, context)
 
     query = update.callback_query
     await query.answer()
-
     data = query.data or ""
 
     if data.startswith("unit:"):
@@ -257,11 +236,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data == "search:menu":
         await show_search_menu(query, context)
 
+    elif data == "toggle:answer":
+        visible = context.user_data.get("answer_visible", True)
+        context.user_data["answer_visible"] = not visible
+        await show_current_question(query, context, edit=True)
+
 
 async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) -> None:
-    """
-    عرض قائمة دروس وحدة معيّنة.
-    """
+    """عرض قائمة دروس وحدة معيّنة."""
     lessons = get_lessons_by_unit(unit_id)
     if not lessons:
         await query.edit_message_text(f"لا توجد دروس في الوحدة: {unit_id}")
@@ -278,7 +260,6 @@ async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) 
             [InlineKeyboardButton(title, callback_data=f"lesson:{lesson_id}")]
         )
 
-    # إضافة أزرار الرجوع والبحث
     keyboard.append(
         [InlineKeyboardButton("🏠 الرئيسية", callback_data="home")]
     )
@@ -286,26 +267,21 @@ async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) 
         [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
     )
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await query.edit_message_text(
         text=f"📘 الوحدة: {unit_id}\nاختر الدرس:",
-        reply_markup=reply_markup,
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
 
 async def start_lesson_questions(
     query, context: ContextTypes.DEFAULT_TYPE, lesson_id: str
 ) -> None:
-    """
-    تحميل أسئلة الدرس وبدء عرضها من السؤال الأول (Learning Mode).
-    """
+    """تحميل أسئلة الدرس وبدء عرضها من السؤال الأول."""
     questions = get_questions_by_lesson(lesson_id)
     if not questions:
         await query.edit_message_text("لا توجد أسئلة لهذا الدرس.")
         return
 
-    # نأخذ الوحدة والعنوان من أول سؤال
     unit_id = questions[0].get("unit_id", "?")
     lesson_title = questions[0].get("lesson_title", lesson_id)
 
@@ -315,40 +291,43 @@ async def start_lesson_questions(
     context.user_data["questions"] = questions
     context.user_data["q_index"] = 0
     context.user_data["view_mode"] = "lesson"
+    context.user_data["answer_visible"] = True  # في وضع الدرس: نعرض الإجابة افتراضياً
 
     await show_current_question(query, context, edit=True)
 
 
-def build_nav_keyboard(has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
-    """
-    إنشاء أزرار التنقل بين الأسئلة + رجوع للرئيسية.
-    """
+def build_nav_keyboard(
+    has_prev: bool,
+    has_next: bool,
+    show_answer: bool,
+    in_search: bool,
+) -> InlineKeyboardMarkup:
+    """إنشاء أزرار التنقل + إظهار/إخفاء الإجابة + رجوع وبحث."""
     buttons: List[List[InlineKeyboardButton]] = []
 
-    row: List[InlineKeyboardButton] = []
-    if has_prev and has_next:
-        row.append(InlineKeyboardButton("⏮ الأول", callback_data="nav:first"))
-        row.append(InlineKeyboardButton("⬅️ السابق", callback_data="nav:prev"))
-        row.append(InlineKeyboardButton("التالي ➡️", callback_data="nav:next"))
-        row.append(InlineKeyboardButton("⏭ الأخير", callback_data="nav:last"))
-        buttons.append(row)
-    else:
-        if has_prev:
-            row.append(InlineKeyboardButton("⏮ الأول", callback_data="nav:first"))
-            row.append(InlineKeyboardButton("⬅️ السابق", callback_data="nav:prev"))
-        if has_next:
-            row.append(InlineKeyboardButton("التالي ➡️", callback_data="nav:next"))
-            row.append(InlineKeyboardButton("⏭ الأخير", callback_data="nav:last"))
-        if row:
-            buttons.append(row)
+    row1: List[InlineKeyboardButton] = []
+    if has_prev:
+        row1.append(InlineKeyboardButton("⏮ الأول", callback_data="nav:first"))
+        row1.append(InlineKeyboardButton("⬅️ السابق", callback_data="nav:prev"))
+    if has_next:
+        row1.append(InlineKeyboardButton("التالي ➡️", callback_data="nav:next"))
+        row1.append(InlineKeyboardButton("⏭ الأخير", callback_data="nav:last"))
+    if row1:
+        buttons.append(row1)
 
-    # صف منفصل للرجوع والبحث
+    # زر إظهار/إخفاء الإجابة
+    label = "🙈 إخفاء الإجابة" if show_answer else "👁 عرض الإجابة"
     buttons.append(
-        [InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="home")]
+        [InlineKeyboardButton(label, callback_data="toggle:answer")]
     )
-    buttons.append(
-        [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
-    )
+
+    # رجوع وبحث
+    row3 = [InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="home")]
+    if in_search:
+        row3.append(InlineKeyboardButton("🔍 بحث جديد", callback_data="search:menu"))
+    else:
+        row3.append(InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu"))
+    buttons.append(row3)
 
     return InlineKeyboardMarkup(buttons)
 
@@ -356,11 +335,12 @@ def build_nav_keyboard(has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
 async def show_current_question(
     query_or_update, context: ContextTypes.DEFAULT_TYPE, edit: bool = False
 ) -> None:
-
+    """عرض السؤال الحالي بشكل بطاقة تعليمية احترافية."""
     questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
     idx: int = context.user_data.get("q_index", 0)
     view_mode: str = context.user_data.get("view_mode", "lesson")
     search_query: str = context.user_data.get("search_query", "")
+    show_answer: bool = context.user_data.get("answer_visible", True)
 
     if not questions:
         msg = "لا توجد أسئلة."
@@ -370,59 +350,17 @@ async def show_current_question(
             await query_or_update.message.reply_text(msg)
         return
 
-    # تأمين الفهرس
     idx = max(0, min(idx, len(questions) - 1))
     context.user_data["q_index"] = idx
 
     q = questions[idx]
-
-    unit_id = q.get("unit_id", "?")
-    lesson_title = q.get("lesson_title", "")
+    unit_id = q.get("unit_id") or context.user_data.get("unit_id", "?")
+    lesson_title = q.get("lesson_title") or context.user_data.get("lesson_title", "")
     q_type = q["type"]
     q_text = q["question"]
     q_answer = q["answer"]
 
-    # رأس البحث أو الدرس
-    if view_mode == "search":
-        header = (
-            f"🔍 *نتائج البحث:* «{search_query}»\n"
-            f"📘 *الوحدة:* {unit_id} — *الدرس:* {lesson_title}\n"
-            f"🟨 *السؤال* {idx + 1} *من* {len(questions)}\n\n"
-        )
-    else:
-        header = (
-            f"🎓 *التدريب*\n"
-            f"📘 *الوحدة:* {unit_id} / *الدرس:* {lesson_title}\n"
-            f"🟨 *السؤال* {idx + 1} *من* {len(questions)}\n\n"
-        )
-
-    # محتوى السؤال والجواب داخل صندوق (Code Block)
-    block = (
-        "```\n"
-        f"❓ السؤال:\n{q_text}\n\n"
-        f"📌 نوع السؤال: {q_type}\n\n"
-        f"📝 الإجابة النموذجية:\n{q_answer}\n"
-        "```\n"
-    )
-
-    text = header + block
-
-    # أزرار الملاحة
-    has_prev = idx > 0
-    has_next = idx < len(questions) - 1
-    reply_markup = build_nav_keyboard(has_prev, has_next)
-
-    if edit:
-        await query_or_update.edit_message_text(
-            text=text, reply_markup=reply_markup, parse_mode="Markdown"
-        )
-    else:
-        await query_or_update.message.reply_text(
-            text=text, reply_markup=reply_markup, parse_mode="Markdown"
-        )
-
-
-    # ===== تنسيق Learning Mode =====
+    # رأس البطاقة
     if view_mode == "search":
         header = (
             f"🔍 نتائج البحث عن: «{search_query}»\n"
@@ -438,30 +376,48 @@ async def show_current_question(
             "━━━━━━━━━━━━\n"
         )
 
-    body = (
-        f"❔ السؤال:\n{q_text}\n\n"
-        f"🧷 نوع السؤال: {q_type}\n\n"
-        f"📌 الإجابة النموذجية:\n{q_answer}"
-    )
+    # محتوى البطاقة
+    if show_answer:
+        body = (
+            f"❓ السؤال:\n{q_text}\n\n"
+            f"🧷 نوع السؤال: {q_type}\n\n"
+            f"📌 الإجابة النموذجية:\n{q_answer}"
+        )
+    else:
+        body = (
+            f"❓ السؤال:\n{q_text}\n\n"
+            f"🧷 نوع السؤال: {q_type}\n\n"
+            "📌 الإجابة مخفية الآن.\n"
+            "اضغط على زر (👁 عرض الإجابة) لعرضها."
+        )
 
     text = header + body
 
     has_prev = idx > 0
     has_next = idx < len(questions) - 1
-    reply_markup = build_nav_keyboard(has_prev, has_next)
+    reply_markup = build_nav_keyboard(
+        has_prev=has_prev,
+        has_next=has_next,
+        show_answer=show_answer,
+        in_search=(view_mode == "search"),
+    )
 
     if edit:
-        await query_or_update.edit_message_text(text=text, reply_markup=reply_markup)
+        await query_or_update.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
     else:
-        await query_or_update.message.reply_text(text=text, reply_markup=reply_markup)
+        await query_or_update.message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
 
 
 async def navigate_question(
     query, context: ContextTypes.DEFAULT_TYPE, direction: str
 ) -> None:
-    """
-    الانتقال إلى السؤال السابق / التالي / الأول / الأخير.
-    """
+    """الذهاب إلى السؤال السابق / التالي / الأول / الأخير."""
     questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
     if not questions:
         await query.edit_message_text("لا توجد أسئلة.")
@@ -478,21 +434,17 @@ async def navigate_question(
     elif direction == "last":
         idx = len(questions) - 1
 
-    if idx < 0:
-        idx = 0
-    if idx > len(questions) - 1:
-        idx = len(questions) - 1
-
+    idx = max(0, min(idx, len(questions) - 1))
     context.user_data["q_index"] = idx
+
     await show_current_question(query, context, edit=True)
 
 
 async def go_home(query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    العودة للقائمة الرئيسية (عرض الوحدات + بحث متقدم).
-    """
+    """العودة للقائمة الرئيسية (الوحدات + البحث)."""
     context.user_data.clear()
     context.user_data["view_mode"] = "home"
+    context.user_data["answer_visible"] = True
 
     units = get_units()
     if not units:
@@ -508,44 +460,39 @@ async def go_home(query, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     await query.edit_message_text(
-        "🎓 *نظام أسئلة اللغة العربية*\n"
+        "🎓 نظام أسئلة اللغة العربية\n"
         "━━━━━━━━━━━━\n"
-        "اختر وحدة دراسية من القائمة، أو استخدم (🔍 بحث متقدم) للعثور على أسئلة حسب كلمة معيّنة.",
+        "اختر وحدة دراسية من الأزرار، أو استخدم (🔍 بحث متقدم) للبحث في الأسئلة.",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
 
 async def show_search_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    شاشة البحث المتقدم: تطلب من المستخدم إرسال كلمة/جملة للبحث.
-    """
+    """شاشة البحث المتقدم: تطلب من المستخدم إرسال كلمة/جملة."""
     context.user_data["view_mode"] = "search_intro"
     context.user_data["search_query"] = ""
+    context.user_data["answer_visible"] = True
 
     keyboard = [
         [InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="home")]
     ]
 
     await query.edit_message_text(
-        "🔍 *البحث المتقدم عن الأسئلة*\n"
+        "🔍 البحث المتقدم عن الأسئلة\n"
         "━━━━━━━━━━━━\n"
         "أرسل الآن كلمة أو جملة نبحث بها في نص السؤال والإجابة.\n\n"
         "أمثلة:\n"
         "- الهمزة\n"
         "- الفعل الماضي\n"
         "- كان وأخواتها\n\n"
-        "سأعرض لك نتائج البحث في وضع التدريب مع إمكانية التنقل بين الأسئلة.",
+        "سأعرض لك نتائج البحث في شكل بطاقات تدريب يمكنك التنقل بينها.",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    استقبال النصوص عندما يكون المستخدم في وضع 'البحث المتقدم'.
-    """
+    """استقبال نص المستخدم في وضع البحث المتقدم."""
     view_mode = context.user_data.get("view_mode")
-
-    # نهتم فقط عندما نكون في شاشة البحث
     if view_mode != "search_intro":
         return
 
@@ -555,7 +502,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     results = search_questions(query_text)
-
     if not results:
         await update.message.reply_text(
             f"🔍 لا توجد أسئلة تحتوي على: «{query_text}». جرّب كلمة أخرى."
@@ -566,6 +512,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     context.user_data["search_query"] = query_text
     context.user_data["questions"] = results
     context.user_data["q_index"] = 0
+    context.user_data["answer_visible"] = True
 
     await show_current_question(update, context, edit=False)
 
@@ -594,7 +541,6 @@ def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    # نصوص البحث المتقدم
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info("Bot is polling.")
