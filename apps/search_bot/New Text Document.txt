@@ -1,0 +1,16 @@
+[Unit]
+Description=Search Telegram Bot
+After=network.target
+
+[Service]
+WorkingDirectory=/home/tamer/telegram_bot
+ExecStart=/home/tamer/telegram_bot/.venv/bin/python /home/tamer/telegram_bot/apps/search_bot/bot.py
+Restart=always
+RestartSec=3
+
+
+User=tamer
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
