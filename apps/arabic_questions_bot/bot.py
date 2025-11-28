@@ -13,7 +13,6 @@ from telegram import (
     ReplyKeyboardMarkup,
     KeyboardButton,
 )
-
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -34,7 +33,8 @@ from core.db import upsert_chat
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
-DB_PATH: Path = BASE_DIR / "questions.db"  # سيتم ضبطه في main()
+# سيتم ضبطها في main()
+DB_PATH: Path = BASE_DIR / "questions.db"
 
 
 # ==========================
@@ -181,10 +181,27 @@ def save_chat_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 # ==========================
+# لوحة الأزرار الثابتة بجانب الكيبورد
+# ==========================
+
+def build_reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🏠 الرئيسية"), KeyboardButton("🔍 بحث متقدم")],
+            [KeyboardButton("⬅️ السابق"), KeyboardButton("➡️ التالي")],
+            [KeyboardButton("👁 تبديل الإجابة")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
+
+
+# ==========================
 # منطق البوت
 # ==========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/start – القائمة الرئيسية (الوحدات + لوحة الأزرار السفلية)."""
     save_chat_from_update(update, context)
 
     units = get_units()
@@ -192,7 +209,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("لا توجد وحدات في قاعدة البيانات.")
         return
 
-    # 1) لوحة الوحدات (inline) مثل ما هي
+    # أزرار الوحدات (inline)
     inline_kb = [
         [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
         for unit_id in units
@@ -205,6 +222,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data["view_mode"] = "home"
     context.user_data["answer_visible"] = True
 
+    # رسالة القائمة الرئيسية
     await update.message.reply_text(
         "🎓 نظام أسئلة اللغة العربية\n"
         "━━━━━━━━━━━━\n"
@@ -212,25 +230,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=InlineKeyboardMarkup(inline_kb),
     )
 
-    # 2) لوحة أزرار دائمة بجانب الكاميرا (Reply Keyboard)
-    reply_kb = ReplyKeyboardMarkup(
-        [
-            [KeyboardButton("🏠 الرئيسية"), KeyboardButton("🔍 بحث متقدم")],
-            [KeyboardButton("⬅️ السابق"), KeyboardButton("➡️ التالي")],
-        ],
-        resize_keyboard=True,   # تخلي اللوحة بحجم مناسب
-        one_time_keyboard=False # تظل ظاهرة دائماً
-    )
-
+    # تفعيل لوحة الأزرار الدائمة تحت الكيبورد
     await update.message.reply_text(
         "لوحة التحكم السريعة 👇",
-        reply_markup=reply_kb,
+        reply_markup=build_reply_keyboard(),
     )
-
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """استقبال جميع ضغطات الأزرار."""
+    """استقبال جميع ضغطات الأزرار inline (الوحدات / الدروس / البحث)."""
     save_chat_from_update(update, context)
 
     query = update.callback_query
@@ -245,20 +253,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         lesson_id = data.split(":", 1)[1]
         await start_lesson_questions(query, context, lesson_id)
 
-    elif data.startswith("nav:"):
-        direction = data.split(":", 1)[1]
-        await navigate_question(query, context, direction)
-
     elif data == "home":
         await go_home(query, context)
 
     elif data == "search:menu":
         await show_search_menu(query, context)
-
-    elif data == "toggle:answer":
-        visible = context.user_data.get("answer_visible", True)
-        context.user_data["answer_visible"] = not visible
-        await show_current_question(query, context, edit=True)
 
 
 async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) -> None:
@@ -280,7 +279,7 @@ async def show_lessons(query, context: ContextTypes.DEFAULT_TYPE, unit_id: str) 
         )
 
     keyboard.append(
-        [InlineKeyboardButton("🏠 الرئيسية", callback_data="home")]
+        [InlineKeyboardButton("🏠 العودة للرئيسية", callback_data="home")]
     )
     keyboard.append(
         [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
@@ -310,51 +309,19 @@ async def start_lesson_questions(
     context.user_data["questions"] = questions
     context.user_data["q_index"] = 0
     context.user_data["view_mode"] = "lesson"
-    context.user_data["answer_visible"] = True  # في وضع الدرس: نعرض الإجابة افتراضياً
+    context.user_data["answer_visible"] = True  # نعرض الإجابة افتراضياً
 
     await show_current_question(query, context, edit=True)
 
 
-def build_nav_keyboard(
-    has_prev: bool,
-    has_next: bool,
-    show_answer: bool,
-    in_search: bool,
-) -> InlineKeyboardMarkup:
-    """إنشاء أزرار التنقل + إظهار/إخفاء الإجابة + رجوع وبحث."""
-    buttons: List[List[InlineKeyboardButton]] = []
-
-    row1: List[InlineKeyboardButton] = []
-    if has_prev:
-        row1.append(InlineKeyboardButton("⏮ الأول", callback_data="nav:first"))
-        row1.append(InlineKeyboardButton("⬅️ السابق", callback_data="nav:prev"))
-    if has_next:
-        row1.append(InlineKeyboardButton("التالي ➡️", callback_data="nav:next"))
-        row1.append(InlineKeyboardButton("⏭ الأخير", callback_data="nav:last"))
-    if row1:
-        buttons.append(row1)
-
-    # زر إظهار/إخفاء الإجابة
-    label = "🙈 إخفاء الإجابة" if show_answer else "👁 عرض الإجابة"
-    buttons.append(
-        [InlineKeyboardButton(label, callback_data="toggle:answer")]
-    )
-
-    # رجوع وبحث
-    row3 = [InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="home")]
-    if in_search:
-        row3.append(InlineKeyboardButton("🔍 بحث جديد", callback_data="search:menu"))
-    else:
-        row3.append(InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu"))
-    buttons.append(row3)
-
-    return InlineKeyboardMarkup(buttons)
-
-
 async def show_current_question(
-    query_or_update, context: ContextTypes.DEFAULT_TYPE, edit: bool = False
+    source, context: ContextTypes.DEFAULT_TYPE, edit: bool = False
 ) -> None:
-    """عرض السؤال الحالي بشكل بطاقة تعليمية احترافية."""
+    """
+    عرض السؤال الحالي بشكل بطاقة تعليمية.
+    - إذا كان source = CallbackQuery نستخدم edit_message_text.
+    - إذا كان source = Update (رسالة عادية) نستخدم reply_text.
+    """
     questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
     idx: int = context.user_data.get("q_index", 0)
     view_mode: str = context.user_data.get("view_mode", "lesson")
@@ -362,11 +329,11 @@ async def show_current_question(
     show_answer: bool = context.user_data.get("answer_visible", True)
 
     if not questions:
-        msg = "لا توجد أسئلة."
-        if edit:
-            await query_or_update.edit_message_text(msg)
+        msg = "لا توجد أسئلة حالياً."
+        if isinstance(source, Update):
+            await source.message.reply_text(msg)
         else:
-            await query_or_update.message.reply_text(msg)
+            await source.edit_message_text(msg)
         return
 
     idx = max(0, min(idx, len(questions) - 1))
@@ -407,60 +374,21 @@ async def show_current_question(
             f"❓ السؤال:\n{q_text}\n\n"
             f"🧷 نوع السؤال: {q_type}\n\n"
             "📌 الإجابة مخفية الآن.\n"
-            "اضغط على زر (👁 عرض الإجابة) لعرضها."
+            "اضغط على زر «👁 تبديل الإجابة» لعرضها."
         )
 
     text = header + body
 
-    has_prev = idx > 0
-    has_next = idx < len(questions) - 1
-    reply_markup = build_nav_keyboard(
-        has_prev=has_prev,
-        has_next=has_next,
-        show_answer=show_answer,
-        in_search=(view_mode == "search"),
-    )
-
-    if edit:
-        await query_or_update.edit_message_text(
-            text=text,
-            reply_markup=reply_markup,
-        )
+    if isinstance(source, Update) or not edit:
+        # رسالة جديدة (مثلاً عند ضغط أزرار الكيبورد)
+        await source.message.reply_text(text)
     else:
-        await query_or_update.message.reply_text(
-            text=text,
-            reply_markup=reply_markup,
-        )
-
-
-async def navigate_question(
-    query, context: ContextTypes.DEFAULT_TYPE, direction: str
-) -> None:
-    """الذهاب إلى السؤال السابق / التالي / الأول / الأخير."""
-    questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
-    if not questions:
-        await query.edit_message_text("لا توجد أسئلة.")
-        return
-
-    idx = context.user_data.get("q_index", 0)
-
-    if direction == "next":
-        idx += 1
-    elif direction == "prev":
-        idx -= 1
-    elif direction == "first":
-        idx = 0
-    elif direction == "last":
-        idx = len(questions) - 1
-
-    idx = max(0, min(idx, len(questions) - 1))
-    context.user_data["q_index"] = idx
-
-    await show_current_question(query, context, edit=True)
+        # تعديل رسالة سابقة (عبر inline في اختيار الدرس/البحث)
+        await source.edit_message_text(text)
 
 
 async def go_home(query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """العودة للقائمة الرئيسية (الوحدات + البحث)."""
+    """العودة للقائمة الرئيسية (مع الإبقاء على لوحة الأزرار السفلية)."""
     context.user_data.clear()
     context.user_data["view_mode"] = "home"
     context.user_data["answer_visible"] = True
@@ -470,11 +398,11 @@ async def go_home(query, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.edit_message_text("لا توجد وحدات في قاعدة البيانات.")
         return
 
-    keyboard: List[List[InlineKeyboardButton]] = [
+    inline_kb = [
         [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
         for unit_id in units
     ]
-    keyboard.append(
+    inline_kb.append(
         [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
     )
 
@@ -482,7 +410,7 @@ async def go_home(query, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🎓 نظام أسئلة اللغة العربية\n"
         "━━━━━━━━━━━━\n"
         "اختر وحدة دراسية من الأزرار، أو استخدم (🔍 بحث متقدم) للبحث في الأسئلة.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=InlineKeyboardMarkup(inline_kb),
     )
 
 
@@ -492,10 +420,6 @@ async def show_search_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data["search_query"] = ""
     context.user_data["answer_visible"] = True
 
-    keyboard = [
-        [InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="home")]
-    ]
-
     await query.edit_message_text(
         "🔍 البحث المتقدم عن الأسئلة\n"
         "━━━━━━━━━━━━\n"
@@ -504,56 +428,65 @@ async def show_search_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
         "- الهمزة\n"
         "- الفعل الماضي\n"
         "- كان وأخواتها\n\n"
-        "سأعرض لك نتائج البحث في شكل بطاقات تدريب يمكنك التنقل بينها.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "سأعرض لك نتائج البحث على شكل بطاقات تدريب يمكنك التنقل بينها "
+        "باستخدام الأزرار أسفل الكيبورد.",
     )
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    استقبال نصوص المستخدم:
+    - أزرار لوحة الكيبورد (رئيسية/بحث/سابق/التالي/تبديل الإجابة).
+    - أو نص البحث المتقدم في وضع search_intro.
+    """
     text = (update.message.text or "").strip()
     view_mode = context.user_data.get("view_mode")
 
-    # أولاً: اختصارات لوحة الأزرار
+    # --------- أوامر لوحة الأزرار السفلية ---------
     if text == "🏠 الرئيسية":
-        # نعيد المستخدم للقائمة الرئيسية
-        # هنا لا يوجد callback_query، فنعمل نسخة مبسطة من go_home
-        context.user_data.clear()
-        context.user_data["view_mode"] = "home"
-        units = get_units()
-        inline_kb = [
-            [InlineKeyboardButton(unit_id, callback_data=f"unit:{unit_id}")]
-            for unit_id in units
-        ]
-        inline_kb.append(
-            [InlineKeyboardButton("🔍 بحث متقدم", callback_data="search:menu")]
-        )
-        await update.message.reply_text(
-            "عدنا إلى القائمة الرئيسية 🎓\nاختر وحدة:",
-            reply_markup=InlineKeyboardMarkup(inline_kb),
-        )
+        await start(update, context)
         return
 
     if text == "🔍 بحث متقدم":
-        # نستدعي منطق شاشة البحث
         context.user_data["view_mode"] = "search_intro"
         context.user_data["search_query"] = ""
+        context.user_data["answer_visible"] = True
         await update.message.reply_text(
-            "🔍 أرسل الآن كلمة أو جملة نبحث عنها في نص السؤال والإجابة."
+            "🔍 أرسل الآن كلمة أو جملة نبحث بها في نص السؤال والإجابة."
         )
         return
 
     if text == "➡️ التالي":
+        questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
+        if not questions:
+            await update.message.reply_text("لا توجد أسئلة حالياً للتنقّل بينها.")
+            return
         context.user_data["q_index"] = context.user_data.get("q_index", 0) + 1
         await show_current_question(update, context, edit=False)
         return
 
     if text == "⬅️ السابق":
+        questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
+        if not questions:
+            await update.message.reply_text("لا توجد أسئلة حالياً للتنقّل بينها.")
+            return
         context.user_data["q_index"] = context.user_data.get("q_index", 0) - 1
         await show_current_question(update, context, edit=False)
         return
 
-    # ثانياً: منطق البحث المتقدم الحالي
+    if text == "👁 تبديل الإجابة":
+        questions: List[Dict[str, Any]] = context.user_data.get("questions", [])
+        if not questions:
+            await update.message.reply_text("لا توجد أسئلة حالياً.")
+            return
+        current = context.user_data.get("answer_visible", True)
+        context.user_data["answer_visible"] = not current
+        await show_current_question(update, context, edit=False)
+        return
+
+    # --------- منطق البحث المتقدم ---------
     if view_mode != "search_intro":
+        # نص عادي في وضع آخر نتجاهله
         return
 
     query_text = text
