@@ -30,7 +30,7 @@ async def game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     if not BOT_TOKEN:
-        logger.error("PI_GAME01_BOT_TOKEN is not set")
+        logger.error("TELEGRAM_BOT_TOKEN is not set")
         return
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
