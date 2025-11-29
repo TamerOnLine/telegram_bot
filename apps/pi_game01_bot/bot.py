@@ -26,6 +26,7 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    logger.info("Game callback from user %s", query.from_user.id)
     await query.answer(url=GAME_URL)
 
 def main():
@@ -36,8 +37,10 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("play", play))
-    app.add_handler(CallbackQueryHandler(game_callback, pattern=f"^{GAME_SHORT_NAME}$"))
+    app.add_handler(CommandHandler("play", start))
+
+    # مهم: نستخدم game_short_name بدل pattern
+    app.add_handler(CallbackQueryHandler(game_callback, game_short_name=GAME_SHORT_NAME))
 
     app.run_polling()
 
