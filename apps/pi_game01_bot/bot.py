@@ -2,7 +2,12 @@ import logging
 import os
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
 # ─────────────────────────────
 # إعدادات عامة
@@ -14,7 +19,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GAME_SHORT_NAME = "pi_game01"   # لازم يطابق اسم اللعبة في BotFather بالضبط
+GAME_SHORT_NAME = "pi_game01"     # يجب أن يطابق BotFather
+GAME_URL = "https://mystrotamer.com/pi_game01/index.html"
 
 if not TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
@@ -23,32 +29,54 @@ if not TOKEN:
 # ─────────────────────────────
 # الأوامر
 # ─────────────────────────────
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "Welcome to Pi Game! Use /play to start the game."
-    )
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Welcome to Pi Game! Use /play to start the game.")
 
 
-async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """يرسل رسالة Game حقيقية فيها زر Play."""
-    chat_id = update.effective_chat.id
+async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """يرسل رسالة Game داخل Telegram"""
     await context.bot.send_game(
-        chat_id=chat_id,
+        chat_id=update.effective_chat.id,
         game_short_name=GAME_SHORT_NAME,
     )
 
 
 # ─────────────────────────────
-# نقطة بداية البوت
+# CallbackQuery – زر Play
 # ─────────────────────────────
-def main() -> None:
+async def game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
+    # من أجل الأمان
+    if not query or not query.game_short_name:
+        await query.answer("Invalid game.")
+        return
+
+    # التأكد أن اللعبة صحيحة
+    if query.game_short_name != GAME_SHORT_NAME:
+        await query.answer("Unknown game.", show_alert=True)
+        return
+
+    # هنا يتم فتح اللعبة – هذا أهم شيء
+    await query.answer(url=GAME_URL)
+
+
+# ─────────────────────────────
+# نقطة تشغيل البوت
+# ─────────────────────────────
+def main():
     logger.info("Starting Pi Game bot...")
-    application = Application.builder().token(TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("play", play))
+    app = Application.builder().token(TOKEN).build()
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("play", play))
+
+    # Callback for game button
+    app.add_handler(CallbackQueryHandler(game_callback))
+
+    app.run_polling()
 
 
 if __name__ == "__main__":
