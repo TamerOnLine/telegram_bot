@@ -40,7 +40,7 @@ def main():
     app.add_handler(CommandHandler("play", start))
 
     # مهم: نستخدم game_short_name بدل pattern
-    app.add_handler(CallbackQueryHandler(game_callback, game_short_name=GAME_SHORT_NAME))
+    app.add_handler(CallbackQueryHandler(game_callback, pattern=f"^{GAME_SHORT_NAME}$"))
 
     app.run_polling()
 
