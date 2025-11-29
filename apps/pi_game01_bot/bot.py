@@ -1,36 +1,43 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
+import logging
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
-# قراءة التوكن من ملف .env الموجود في نفس المجلد
-TOKEN = os.getenv("BOT_TOKEN")
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
-# رابط اللعبة (عدّله حسب مكان رفع اللعبة)
-# مثال: رابط محلي عندما تشغّل السيرفر على الكمبيوتر
-GAME_URL = "http://192.168.1.24:8000/index.html"
+BOT_TOKEN = os.getenv("PI_GAME01_BOT_TOKEN")  # حط التوكن في هذا المتغير
+GAME_SHORT_NAME = "pi_game01"                 # نفس الـ short name في BotFather
+GAME_URL = "https://YOUR-SERVER/game/index.html"  # عدّلها لرابط لعبتك
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("🎮 العب لعبة Pi", url=GAME_URL)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "مرحبًا! اضغط على الزر لبدأ لعب لعبة Pi HTML5 🎮",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text("Welcome to Pi Game! Use /play to start the game.")
 
-async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("🎮 افتح اللعبة", url=GAME_URL)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "اضغط لفتح اللعبة 👇",
-        reply_markup=reply_markup
-    )
+async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_game(GAME_SHORT_NAME)
+
+async def game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer(url=GAME_URL)
 
 def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    if not BOT_TOKEN:
+        logger.error("PI_GAME01_BOT_TOKEN is not set")
+        return
 
-    # الأوامر
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("game", game))
+    app.add_handler(CommandHandler("play", play))
+    app.add_handler(CallbackQueryHandler(game_callback, pattern=f"^{GAME_SHORT_NAME}$"))
 
     app.run_polling()
 
