@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("PI_GAME01_BOT_TOKEN")  # حط التوكن في هذا المتغير
 GAME_SHORT_NAME = "pi_game01"                 # نفس الـ short name في BotFather
-GAME_URL = "https://YOUR-SERVER/game/index.html"  # عدّلها لرابط لعبتك
+GAME_URL = "https://mystrotamer.com/pi_game01/index.html"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Welcome to Pi Game! Use /play to start the game.")
