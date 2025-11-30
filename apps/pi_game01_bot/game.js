@@ -66,13 +66,7 @@ window.addEventListener("keydown", (e) => {
 
   if (e.key === " ") {
     e.preventDefault();
-    if (game.state === GAME_STATE.MENU || game.state === GAME_STATE.GAME_OVER) {
-      startGame();
-    } else if (game.state === GAME_STATE.PLAYING) {
-      pauseGame();
-    } else if (game.state === GAME_STATE.PAUSED) {
-      resumeGame();
-    }
+    handleStartPause(); // مثل التاب على الشاشة
   }
 
   if (e.key.toLowerCase() === "r") {
@@ -96,6 +90,17 @@ function rectsCollide(a, b) {
     a.y + a.height < b.y ||
     a.y > b.y + b.height
   );
+}
+
+// يشغّل / يوقف اللعبة (مفيد للموبايل والكيبورد)
+function handleStartPause() {
+  if (game.state === GAME_STATE.MENU || game.state === GAME_STATE.GAME_OVER) {
+    startGame();
+  } else if (game.state === GAME_STATE.PLAYING) {
+    pauseGame();
+  } else if (game.state === GAME_STATE.PAUSED) {
+    resumeGame();
+  }
 }
 
 // -----------------------------
@@ -244,11 +249,11 @@ function render() {
 
   // Messages
   if (game.state === GAME_STATE.MENU) {
-    drawCenterMessage("Press SPACE to Start");
+    drawCenterMessage("Tap or press SPACE to Start");
   } else if (game.state === GAME_STATE.PAUSED) {
-    drawCenterMessage("Paused - Press SPACE to Resume");
+    drawCenterMessage("Paused - Tap or press SPACE to Resume");
   } else if (game.state === GAME_STATE.GAME_OVER) {
-    drawCenterMessage("Game Over - Press R to Restart");
+    drawCenterMessage("Game Over - Tap or press R/SPACE to Restart");
   }
 }
 
@@ -288,7 +293,7 @@ function loop(timestamp) {
 // =======================================
 const mcButtons = document.querySelectorAll(".mc-btn");
 
-mcButtons.forEach(btn => {
+mcButtons.forEach((btn) => {
   const dir = btn.dataset.dir;
 
   const start = () => {
@@ -296,6 +301,11 @@ mcButtons.forEach(btn => {
     if (dir === "down") game.keys["arrowdown"] = true;
     if (dir === "left") game.keys["arrowleft"] = true;
     if (dir === "right") game.keys["arrowright"] = true;
+
+    // لو اللعبة في MENU أو GAME_OVER وبدأ المستخدم يضغط الأسهم → نبدأ اللعبة
+    if (game.state === GAME_STATE.MENU || game.state === GAME_STATE.GAME_OVER) {
+      startGame();
+    }
   };
 
   const stop = () => {
@@ -320,6 +330,16 @@ mcButtons.forEach(btn => {
   btn.addEventListener("mousedown", start);
   btn.addEventListener("mouseup", stop);
   btn.addEventListener("mouseleave", stop);
+});
+
+// السماح بالبدء/الإيقاف بالضغط على الكانفاس (مفيد للموبايل)
+canvas.addEventListener("click", () => {
+  handleStartPause();
+});
+
+canvas.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  handleStartPause();
 });
 
 // init
