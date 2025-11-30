@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GAME_SHORT_NAME = "pi_game01"     # يجب أن يطابق BotFather
+GAME_SHORT_NAME = "pi_game01x"     # يجب أن يطابق BotFather
 GAME_URL = "https://mystrotamer.com/pi_game01/index.html"
 
 if not TOKEN:
