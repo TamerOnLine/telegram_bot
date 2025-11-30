@@ -54,7 +54,6 @@ body {
   border-radius: 999px;
   cursor: pointer;
   font-size: 0.85rem;
-  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.2s;
 }
 
 #btn-pi-login {
@@ -67,11 +66,6 @@ body {
   color: #111827;
 }
 
-.pi-panel button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
-}
-
 /* Layout */
 .game-layout {
   display: grid;
@@ -79,7 +73,6 @@ body {
   gap: 12px;
 }
 
-/* Game canvas area */
 .game-area {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 24px;
@@ -105,38 +98,6 @@ body {
   gap: 10px;
 }
 
-.side-panel h2 {
-  font-size: 1.1rem;
-  margin-bottom: 4px;
-}
-
-.side-panel h3 {
-  font-size: 0.95rem;
-  margin-top: 8px;
-  margin-bottom: 4px;
-}
-
-.side-panel p,
-.side-panel li {
-  font-size: 0.85rem;
-}
-
-.side-panel ul {
-  margin-left: 16px;
-}
-
-.ad-box {
-  margin-top: auto;
-  margin-bottom: 4px;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px dashed #cbd5f5;
-  font-size: 0.8rem;
-  text-align: center;
-  color: #6b7280;
-  background: #f9fafb;
-}
-
 /* Footer */
 .footer {
   margin-top: 12px;
@@ -145,8 +106,8 @@ body {
   font-size: 0.8rem;
   color: #6b7280;
 }
-  
-/* Responsive */
+
+/* Mobile responsive */
 @media (max-width: 900px) {
   .game-layout {
     grid-template-columns: 1fr;
@@ -154,45 +115,37 @@ body {
 }
 
 /* ================================
-   Mobile Controls (always visible in game)
+   Mobile Controls (final)
 ================================ */
 #mobile-controls {
   position: fixed;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;              /* نعرضه دائماً */
+  display: flex !important;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  z-index: 9999;
+  gap: 6px;
+  z-index: 999999;
+  pointer-events: auto;
 }
 
 .mc-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .mc-btn {
-  width: 70px;
-  height: 70px;
-  font-size: 28px;
-  background: rgba(255, 255, 255, 0.85);
+  width: 60px;
+  height: 60px;
+  font-size: 26px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.9);
   border: 2px solid #111827;
-  border-radius: 16px;
-  box-shadow: 0 6px 14px rgba(0,0,0,0.25);
-  backdrop-filter: blur(5px);
-  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 }
 
 .mc-btn:active {
   background: #111827;
-  color: white;
-}
-
-/* (اختياري) إخفاء الأزرار على الشاشات العريضة جداً (ديسكتوب) */
-@media (min-width: 1200px) {
-  #mobile-controls {
-    display: none;
-  }
+  color: #fff;
 }
