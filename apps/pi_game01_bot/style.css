@@ -190,9 +190,15 @@ body {
   color: white;
 }
 
-/* Show controls for mobile */
-@media (max-width: 800px) {
+/* Always show controls on mobile OR inside Telegram WebApp */
+#mobile-controls {
+  display: flex !important;
+}
+
+/* Optional: hide on desktop wide screens */
+@media (min-width: 1000px) {
   #mobile-controls {
-    display: flex;
+    display: none !important;
   }
 }
+
