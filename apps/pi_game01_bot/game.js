@@ -283,6 +283,45 @@ function loop(timestamp) {
   requestAnimationFrame(loop);
 }
 
+// =======================================
+// Mobile Touch Controls
+// =======================================
+const mcButtons = document.querySelectorAll(".mc-btn");
+
+mcButtons.forEach(btn => {
+  const dir = btn.dataset.dir;
+
+  const start = () => {
+    if (dir === "up") game.keys["arrowup"] = true;
+    if (dir === "down") game.keys["arrowdown"] = true;
+    if (dir === "left") game.keys["arrowleft"] = true;
+    if (dir === "right") game.keys["arrowright"] = true;
+  };
+
+  const stop = () => {
+    game.keys["arrowup"] = false;
+    game.keys["arrowdown"] = false;
+    game.keys["arrowleft"] = false;
+    game.keys["arrowright"] = false;
+  };
+
+  // Touch events
+  btn.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    start();
+  });
+
+  btn.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    stop();
+  });
+
+  // Mouse fallback (desktop)
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("mouseup", stop);
+  btn.addEventListener("mouseleave", stop);
+});
+
 // init
 uiState.textContent = game.state;
 requestAnimationFrame(loop);
